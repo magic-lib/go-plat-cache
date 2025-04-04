@@ -1,0 +1,83 @@
+package cache
+
+import (
+	"context"
+	"fmt"
+	"github.com/go-redis/redis/v8"
+	startupCfg "github.com/magic-lib/go-plat-startupcfg/startupcfg"
+	"github.com/magic-lib/go-plat-utils/conv"
+	"time"
+)
+
+type redisCache[V any] struct {
+	redisCfg *startupCfg.RedisConfig //redis配置
+	rc       *redisClient
+}
+
+var (
+	defaultRedisCfg *startupCfg.RedisConfig
+)
+
+// SetDefaultRedisConfig 切换默认的redis连接
+func SetDefaultRedisConfig(con *startupCfg.RedisConfig) {
+	if con != nil {
+		defaultRedisCfg = con
+	}
+}
+
+// setDefaultRedisConfigIfEmpty 切换默认的redis连接
+func setDefaultRedisConfigIfEmpty(con *startupCfg.RedisConfig) {
+	if defaultRedisCfg == nil {
+		SetDefaultRedisConfig(con)
+	}
+}
+
+// getRealRedisConfig 获取真实的redis配置
+func getRealRedisConfig(redisCfg ...*startupCfg.RedisConfig) (*startupCfg.RedisConfig, *redis.Client) {
+	if len(redisCfg) > 0 {
+		for _, oneCfg := range redisCfg {
+			if oneCfg != nil {
+				redisCli := NewRedisClient(oneCfg)
+				cli, err := redisCli.getClient(getContext(nil))
+				if cli != nil && err == nil {
+					return oneCfg, cli
+				}
+			}
+		}
+	}
+	if defaultRedisCfg != nil {
+		redisCli := NewRedisClient(defaultRedisCfg)
+		cli, err := redisCli.getClient(getContext(nil))
+		if cli != nil && err == nil {
+			return defaultRedisCfg, cli
+		}
+	}
+	return nil, nil
+}
+
+// NewRedisCache 新建
+func NewRedisCache[V string](redisCfg ...*startupCfg.RedisConfig) (*redisCache[V], error) {
+	oneCfg, _ := getRealRedisConfig(redisCfg...)
+	if oneCfg != nil {
+		return &redisCache[V]{
+			redisCfg: oneCfg,
+			rc:       NewRedisClient(oneCfg),
+		}, nil
+	}
+	return nil, fmt.Errorf("redis NewRedisCache config empty")
+}
+
+// Get 从缓存中取得一个值
+func (co *redisCache[V]) Get(ctx context.Context, key string) (string, error) {
+	return co.rc.Get(getContext(ctx), key)
+}
+
+// Set timeout为秒
+func (co *redisCache[V]) Set(ctx context.Context, key string, val V, timeout time.Duration) (bool, error) {
+	return co.rc.Set(getContext(ctx), key, conv.String(val), timeout)
+}
+
+// Del 从缓存中删除一个key
+func (co *redisCache[V]) Del(ctx context.Context, key string) (bool, error) {
+	return co.rc.Del(getContext(ctx), key)
+}
