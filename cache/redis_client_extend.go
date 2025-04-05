@@ -5,12 +5,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/go-redis/redis/v8"
-	startupCfg "github.com/magic-lib/go-plat-startupcfg/startupcfg"
-	"github.com/magic-lib/go-plat-utils/cond"
+	"github.com/magic-lib/go-plat-startupcfg/startupcfg"
 	"github.com/magic-lib/go-plat-utils/conv"
 	"github.com/magic-lib/go-plat-utils/goroutines"
-	"github.com/magic-lib/go-plat-utils/logs"
-	cmap "github.com/orcaman/concurrent-map"
 	"runtime"
 	"sync"
 	"time"
@@ -18,9 +15,8 @@ import (
 
 var (
 	onceError sync.Once
-	redisMap  = cmap.New()
 
-	clientConnectTimeout = 3 * time.Second
+	defaultPingTimeout = 3 * time.Second
 
 	poolMaxSize = 100
 	poolMinSize = 10
@@ -35,70 +31,34 @@ var (
 	poolIdleCheckFrequency = time.Minute //空闲连接检查频率。默认为1分钟。将其设为-1可以禁用连接空闲超时检查器，但是仍然会
 )
 
-func getRedisFromMap(ctx context.Context, redisCfg *startupCfg.RedisConfig) (*redis.Client, error) {
-	datasourceName := redisCfg.DatasourceName()
-	if datasourceName == "" {
-		return nil, fmt.Errorf("getOneRedis config error")
+func checkConnection(conn *redis.Client, pingTimeout time.Duration) error {
+	if conn == nil {
+		return fmt.Errorf("conn is nil")
 	}
 
-	if data, ok := redisMap.Get(datasourceName); ok {
-		if oldPool, ok := data.(*redis.Client); ok {
-			if !cond.IsNil(oldPool) {
-				_, err := oldPool.Ping(ctx).Result()
-				if err == nil {
-					return oldPool, nil
-				}
-				return oldPool, err
-			}
-		} else {
-			redisMap.Remove(datasourceName)
-		}
+	timeout := defaultPingTimeout
+	if pingTimeout > 0 {
+		timeout = pingTimeout
 	}
-	return nil, nil
+
+	newCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return conn.Ping(newCtx).Err()
 }
 
-func setNewRedisToMap(ctx context.Context, closeOldPool *redis.Client, redisCfg *startupCfg.RedisConfig) (*redis.Client, error) {
+func getRedisFromCfg(redisCfg *startupcfg.RedisConfig) (*redis.Client, error) {
 	dialOpt := getRedisOption(redisCfg, getPoolSize())
 	newClient := redis.NewClient(dialOpt)
-	_, err := newClient.Ping(ctx).Result()
+	err := checkConnection(newClient, redisCfg.PingTimeout)
 	if err != nil {
 		_ = newClient.Close()
 		return nil, err
 	}
-
-	//新建以后，需要回收老的
-	if closeOldPool != nil {
-		defer func(oldPool *redis.Client) {
-			_ = oldPool.Close()
-		}(closeOldPool)
-	}
-
-	redisMap.Set(redisCfg.DatasourceName(), newClient)
-
-	setDefaultRedisConfigIfEmpty(redisCfg)
-
 	return newClient, nil
 }
 
-func getOneRedis(ctx context.Context, redisCfg *startupCfg.RedisConfig) (*redis.Client, error) {
-	redisCfg, _ = getRealRedisConfig(redisCfg)
-	if redisCfg == nil {
-		return nil, fmt.Errorf("getOneRedis config is nil")
-	}
-
-	//设置连接超时时间
-	newCtx, cancel := context.WithTimeout(ctx, clientConnectTimeout)
-	defer cancel()
-
-	closeOldPool, err := getRedisFromMap(newCtx, redisCfg)
-	if closeOldPool != nil && err == nil {
-		return closeOldPool, nil
-	}
-
-	return setNewRedisToMap(newCtx, closeOldPool, redisCfg)
-}
-
-func getRedisOption(redisCfg *startupCfg.RedisConfig, poolSize int) *redis.Options {
+func getRedisOption(redisCfg startupcfg.Database, poolSize int) *redis.Options {
 	dialOpt := &redis.Options{}
 	if dataInt, ok := conv.Int64(redisCfg.DatabaseName()); ok {
 		dialOpt.DB = int(dataInt)
@@ -106,15 +66,19 @@ func getRedisOption(redisCfg *startupCfg.RedisConfig, poolSize int) *redis.Optio
 	dialOpt.Username = redisCfg.User()
 	dialOpt.Password = redisCfg.Password()
 
-	if redisCfg.UseTLS {
-		tlsConfig := &tls.Config{
-			InsecureSkipVerify: true,
+	if oneTls, ok := redisCfg.Extend("tls"); ok {
+		tlsBool, ok := conv.Bool(oneTls)
+		if ok && tlsBool {
+			tlsConfig := &tls.Config{
+				InsecureSkipVerify: true,
+			}
+			if tlsConfig.ServerName == "" {
+				tlsConfig.ServerName = redisCfg.ServerAddress()
+			}
+			dialOpt.TLSConfig = tlsConfig
 		}
-		if tlsConfig.ServerName == "" {
-			tlsConfig.ServerName = redisCfg.ServerAddress()
-		}
-		dialOpt.TLSConfig = tlsConfig
 	}
+
 	dialOpt.Addr = redisCfg.ServerAddress()
 	dialOpt.Network = redisCfg.ProtocolName()
 
@@ -143,26 +107,6 @@ func getPoolSize() int {
 		poolSize = poolMaxSize
 	}
 	return poolSize
-}
-
-// getRedisClient 获取redis客户端
-func getRedisClient(ctx context.Context, redisCfg *startupCfg.RedisConfig) (*redis.Client, error) {
-	loggers := logs.DefaultLogger()
-
-	cli, err := getOneRedis(ctx, redisCfg)
-	if err != nil {
-		if redisCfg != nil {
-			// 如果未设置redis，则提示
-			loggers.Error("[redis-client] error:", redisCfg, err.Error())
-		} else {
-			// 没有设置，全局只提醒一次
-			onceError.Do(func() {
-				loggers.Warn("[redis-client] no set empty:", err.Error())
-			})
-		}
-		return nil, err
-	}
-	return cli, nil
 }
 
 // 取得默认的ctx

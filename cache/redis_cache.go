@@ -3,61 +3,53 @@ package cache
 import (
 	"context"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	startupCfg "github.com/magic-lib/go-plat-startupcfg/startupcfg"
+	"github.com/magic-lib/go-plat-startupcfg/startupcfg"
 	"github.com/magic-lib/go-plat-utils/conv"
 	"time"
 )
 
 type redisCache[V any] struct {
-	redisCfg *startupCfg.RedisConfig //redis配置
+	redisCfg *startupcfg.RedisConfig //redis配置
 	rc       *redisClient
 }
 
 var (
-	defaultRedisCfg *startupCfg.RedisConfig
+	defaultRedisCfg *startupcfg.RedisConfig
 )
 
 // SetDefaultRedisConfig 切换默认的redis连接
-func SetDefaultRedisConfig(con *startupCfg.RedisConfig) {
+func SetDefaultRedisConfig(con *startupcfg.RedisConfig) {
 	if con != nil {
 		defaultRedisCfg = con
 	}
 }
 
-// setDefaultRedisConfigIfEmpty 切换默认的redis连接
-func setDefaultRedisConfigIfEmpty(con *startupCfg.RedisConfig) {
-	if defaultRedisCfg == nil {
-		SetDefaultRedisConfig(con)
-	}
-}
-
 // getRealRedisConfig 获取真实的redis配置
-func getRealRedisConfig(redisCfg ...*startupCfg.RedisConfig) (*startupCfg.RedisConfig, *redis.Client) {
-	if len(redisCfg) > 0 {
-		for _, oneCfg := range redisCfg {
-			if oneCfg != nil {
-				redisCli := NewRedisClient(oneCfg)
-				cli, err := redisCli.getClient(getContext(nil))
-				if cli != nil && err == nil {
-					return oneCfg, cli
-				}
-			}
-		}
+func getRealRedisConfig(redisCfg ...*startupcfg.RedisConfig) *startupcfg.RedisConfig {
+	if redisCfg == nil {
+		redisCfg = make([]*startupcfg.RedisConfig, 0)
 	}
 	if defaultRedisCfg != nil {
-		redisCli := NewRedisClient(defaultRedisCfg)
-		cli, err := redisCli.getClient(getContext(nil))
-		if cli != nil && err == nil {
-			return defaultRedisCfg, cli
+		redisCfg = append(redisCfg, defaultRedisCfg)
+	}
+
+	for _, oneCfg := range redisCfg {
+		if oneCfg == nil {
+			continue
+		}
+		redisCli := NewRedisClient(oneCfg)
+		connected := redisCli.CheckConnect()
+		if connected {
+			return oneCfg
 		}
 	}
-	return nil, nil
+
+	return nil
 }
 
 // NewRedisCache 新建
-func NewRedisCache[V string](redisCfg ...*startupCfg.RedisConfig) (*redisCache[V], error) {
-	oneCfg, _ := getRealRedisConfig(redisCfg...)
+func NewRedisCache[V string](redisCfg ...*startupcfg.RedisConfig) (*redisCache[V], error) {
+	oneCfg := getRealRedisConfig(redisCfg...)
 	if oneCfg != nil {
 		return &redisCache[V]{
 			redisCfg: oneCfg,

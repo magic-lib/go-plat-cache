@@ -5,7 +5,7 @@ go 1.24.1
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/magic-lib/go-plat-startupcfg v1.20250403.3
+	github.com/magic-lib/go-plat-startupcfg v1.20250405.1
 	github.com/magic-lib/go-plat-utils v1.20250404.2
 	github.com/orcaman/concurrent-map v1.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible

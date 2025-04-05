@@ -2,23 +2,27 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-redis/redis/v8"
-	startupCfg "github.com/magic-lib/go-plat-startupcfg/startupcfg"
+	"github.com/magic-lib/go-plat-startupcfg/startupcfg"
+	"github.com/magic-lib/go-plat-utils/logs"
 	"time"
 )
 
 var (
-	minMaxTimeout   = 24 * time.Hour      //最小的最长时间
-	redisMaxTimeout = 24 * 90 * time.Hour //redis最长存储时间点，避免无限期占用Redis空间
+	minMaxTimeout     = 24 * time.Hour      //最小的最长时间
+	redisMaxTimeout   = 24 * 90 * time.Hour //redis最长存储时间点，避免无限期占用Redis空间
+	checkConnInterval = 20 * time.Second
 )
 
 // redisClient 内部redis结构
 type redisClient struct {
-	redisCfg *startupCfg.RedisConfig
+	redisCfg *startupcfg.RedisConfig
+	cli      *redis.Client
 }
 
 // NewRedisClient 新建redis连接
-func NewRedisClient(redisCfg *startupCfg.RedisConfig) *redisClient {
+func NewRedisClient(redisCfg *startupcfg.RedisConfig) *redisClient {
 	return &redisClient{redisCfg: redisCfg}
 }
 
@@ -57,10 +61,6 @@ func (r *redisClient) NsHSet(ctx context.Context, ns string, key, field, val str
 // NsHDel xxx
 func (r *redisClient) NsHDel(ctx context.Context, ns string, key, field string) (bool, error) {
 	return r.HDel(ctx, getNsKey(ns, key), field)
-}
-
-func (r *redisClient) getClient(ctx context.Context) (*redis.Client, error) {
-	return getRedisClient(ctx, r.redisCfg)
 }
 
 // Get 从缓存中取得一个值，如果没有redis则从本地缓存
@@ -157,4 +157,44 @@ func (r *redisClient) HDel(ctx context.Context, key, field string) (bool, error)
 		return false, err
 	}
 	return true, nil
+}
+
+func (r *redisClient) CheckConnect() bool {
+	_, err := r.getOneRedis()
+	if err == nil {
+		return true
+	}
+	return false
+}
+
+func (r *redisClient) getClient(_ context.Context) (*redis.Client, error) {
+	cli, err := r.getOneRedis()
+	if cli != nil && err == nil {
+		return cli, nil
+	}
+
+	loggers := logs.DefaultLogger()
+	if r.redisCfg != nil {
+		// 如果未设置redis，则提示
+		loggers.Error("[redis-client] error:", r.redisCfg, err.Error())
+	} else {
+		// 没有设置，全局只提醒一次
+		onceError.Do(func() {
+			loggers.Warn("[redis-client] no set empty:", err.Error())
+		})
+	}
+	return nil, err
+}
+
+func (r *redisClient) getOneRedis() (*redis.Client, error) {
+	manager := NewRedisClientManager(checkConnInterval)
+	rc := manager.Get(r.redisCfg)
+	if rc != nil && rc.cli != nil {
+		if defaultRedisCfg == nil {
+			SetDefaultRedisConfig(r.redisCfg)
+		}
+		return rc.cli, nil
+	}
+
+	return nil, fmt.Errorf("conn cant connect")
 }
