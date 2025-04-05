@@ -23,9 +23,13 @@ func New[T any](ns string, con ...CommCache[string]) *defaultCache[T] {
 	com := new(defaultCache[T])
 	com.ns = ns
 	if len(con) > 0 {
-		com.isMemCache = false
-		com.cCache = con[0]
-		return com
+		for _, item := range con {
+			if item != nil {
+				com.isMemCache = false
+				com.cCache = item
+				return com
+			}
+		}
 	}
 	com.isMemCache = true
 	return com
