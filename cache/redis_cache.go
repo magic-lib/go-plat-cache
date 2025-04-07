@@ -56,7 +56,7 @@ func NewRedisCache[V string](redisCfg ...*startupcfg.RedisConfig) (*redisCache[V
 			rc:       NewRedisClient(oneCfg),
 		}, nil
 	}
-	return nil, fmt.Errorf("redis NewRedisCache config empty")
+	return nil, fmt.Errorf("redis NewRedisCache config error: %v", redisCfg)
 }
 
 // Get 从缓存中取得一个值
