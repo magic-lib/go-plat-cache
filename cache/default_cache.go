@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/gob"
 	"github.com/magic-lib/go-plat-utils/conv"
+	"google.golang.org/appengine/log"
 	"time"
 )
 
@@ -67,9 +68,10 @@ func (co *defaultCache[T]) getOne(ctx context.Context, key string) (T, error) {
 
 	ret, err := co.cCache.Get(ctx, key)
 	if err != nil {
-		return *new(T), err
+		log.Errorf(ctx, "default cache getOne: %v, %v", ret, err)
+		ret = "" //如果报错，则可以表示没有查到，redis没有连接上的情况
+		//return *new(T), err
 	}
-
 	return decodeValue[T](ret)
 }
 
@@ -109,7 +111,7 @@ func encodeValue[T any](val T) string {
 func (co *defaultCache[T]) setOne(ctx context.Context, key string, val T, timeout time.Duration) (bool, error) {
 	var retBool, ret, ret2 bool
 	var retError, err, err2 error
-	if co.cCache != nil {
+	if co.cCache != nil { //如果获取成功，则不用默认的内存了
 		saveStr := encodeValue[T](val)
 		ret, err = co.cCache.Set(ctx, key, saveStr, timeout)
 		if err == nil && ret {
@@ -122,8 +124,9 @@ func (co *defaultCache[T]) setOne(ctx context.Context, key string, val T, timeou
 		retBool = ret2
 		retError = err2
 	} else {
-		retBool = ret
-		retError = err
+		log.Errorf(ctx, "default cache setOne: %v, %v", ret, err)
+		retBool = ret2 //如果报错，则redis没有连接上的情况,则利用memcache
+		retError = err2
 	}
 	return retBool, retError
 }
@@ -139,8 +142,9 @@ func (co *defaultCache[T]) delOne(ctx context.Context, key string) (bool, error)
 		retBool = ret2
 		retError = err2
 	} else {
-		retBool = ret
-		retError = err
+		log.Errorf(ctx, "default cache delOne: %v, %v", ret, err)
+		retBool = ret2
+		retError = err2
 	}
 	return retBool, retError
 }
