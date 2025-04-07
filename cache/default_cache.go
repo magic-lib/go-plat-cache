@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/gob"
 	"github.com/magic-lib/go-plat-utils/conv"
-	"google.golang.org/appengine/log"
+	"log"
 	"time"
 )
 
@@ -68,7 +68,7 @@ func (co *defaultCache[T]) getOne(ctx context.Context, key string) (T, error) {
 
 	ret, err := co.cCache.Get(ctx, key)
 	if err != nil {
-		log.Errorf(ctx, "default cache getOne: %v, %v", ret, err)
+		log.Printf("default cache getOne: %v, %v", ret, err)
 		ret = "" //如果报错，则可以表示没有查到，redis没有连接上的情况
 		//return *new(T), err
 	}
@@ -124,7 +124,7 @@ func (co *defaultCache[T]) setOne(ctx context.Context, key string, val T, timeou
 		retBool = ret2
 		retError = err2
 	} else {
-		log.Errorf(ctx, "default cache setOne: %v, %v", ret, err)
+		log.Printf("default cache setOne: %v, %v", ret, err)
 		retBool = ret2 //如果报错，则redis没有连接上的情况,则利用memcache
 		retError = err2
 	}
@@ -142,7 +142,7 @@ func (co *defaultCache[T]) delOne(ctx context.Context, key string) (bool, error)
 		retBool = ret2
 		retError = err2
 	} else {
-		log.Errorf(ctx, "default cache delOne: %v, %v", ret, err)
+		log.Printf("default cache delOne: %v, %v", ret, err)
 		retBool = ret2
 		retError = err2
 	}
