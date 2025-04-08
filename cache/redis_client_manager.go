@@ -66,7 +66,11 @@ func (r *redisClientManager) Get(redisCfg *startupcfg.RedisConfig) *redisClient 
 			if err != nil {
 				return nil
 			}
-			newRedisClient.cli = newClient
+			newRedisClient = &redisClient{
+				redisCfg: redisCfg,
+				cli:      newClient,
+			}
+			redisMap.Set(redisConnStr, newRedisClient)
 		}
 		return newRedisClient
 	}
