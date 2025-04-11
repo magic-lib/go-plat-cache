@@ -159,6 +159,21 @@ func (r *redisClient) HDel(ctx context.Context, key, field string) (bool, error)
 	return true, nil
 }
 
+// BatchExec 批量执行
+func (r *redisClient) BatchExec(ctx context.Context, f func(ctx context.Context, pipe redis.Pipeliner) []redis.Cmder) ([]redis.Cmder, error) {
+	c, err := r.getClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("redis getClient error: %w", err)
+	}
+	pipe := c.Pipeline()
+	cmdList := f(ctx, pipe)
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("redis pipe Exec error: %w", err)
+	}
+	return cmdList, nil
+}
+
 func (r *redisClient) CheckConnect() bool {
 	_, err := r.getOneRedis()
 	if err == nil {
