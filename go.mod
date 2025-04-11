@@ -6,11 +6,12 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/magic-lib/go-plat-startupcfg v1.20250405.1
-	github.com/magic-lib/go-plat-utils v1.20250407.1
+	github.com/magic-lib/go-plat-utils v1.20250408.1
 	github.com/orcaman/concurrent-map v1.0.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/redis/go-redis/v9 v9.7.3
+	github.com/samber/lo v1.49.1
 	github.com/timandy/routine v1.1.5
 )
 
@@ -49,7 +50,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
-	github.com/samber/lo v1.49.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/soniah/evaler v2.2.0+incompatible // indirect
 	github.com/sony/sonyflake v1.2.0 // indirect
