@@ -21,8 +21,8 @@ type resInfo[T any] struct {
 	createTime time.Time //创建时间
 }
 
-// ConnConfig 资源池结构体，传入参数
-type ConnConfig[T any] struct {
+// ResPoolConfig 资源池结构体，传入参数
+type ResPoolConfig[T any] struct {
 	MaxSize   int               // 最大资源数量
 	MaxUsage  time.Duration     // 资源最大使用时间
 	New       func() (T, error) // 创建新资源的函数
@@ -31,7 +31,7 @@ type ConnConfig[T any] struct {
 }
 
 type CommPool[T any] struct {
-	ConnConfig[T]
+	ResPoolConfig[T]
 
 	idle []*resInfo[T] // 空闲资源列表
 	used []*resInfo[T] // 已使用资源列表
@@ -39,10 +39,10 @@ type CommPool[T any] struct {
 	mu   sync.RWMutex
 }
 
-// NewPoolConn 创建一个新的资源池
-func NewPoolConn[T any](connPool *ConnConfig[T]) *CommPool[T] {
+// NewResPool 创建一个新的资源池
+func NewResPool[T any](connPool *ResPoolConfig[T]) *CommPool[T] {
 	pool := new(CommPool[T])
-	pool.ConnConfig = *connPool
+	pool.ResPoolConfig = *connPool
 	if pool.MaxSize <= 0 {
 		pool.MaxSize = defaultMaxSize
 	}
@@ -59,7 +59,7 @@ func NewPoolConn[T any](connPool *ConnConfig[T]) *CommPool[T] {
 	// 默认放一个，用来检测是否可以创建
 	resource, err := pool.create()
 	if err != nil {
-		fmt.Println("NewPoolConn error:", err.Error())
+		fmt.Println("NewResPool error:", err.Error())
 	} else {
 		pool.idle = append(pool.idle, resource)
 	}
