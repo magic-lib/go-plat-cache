@@ -8,8 +8,8 @@ type objectPool[T any] struct {
 	pool sync.Pool
 }
 
-// NewPoolObject 创建一个新的泛型 Pool 实例
-func NewPoolObject[T any](newFunc func() T) *objectPool[T] {
+// NewObjectPool 创建一个新的泛型 Pool 实例
+func NewObjectPool[T any](newFunc func() T) *objectPool[T] {
 	return &objectPool[T]{
 		pool: sync.Pool{
 			New: func() interface{} {
