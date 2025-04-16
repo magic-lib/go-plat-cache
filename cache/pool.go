@@ -21,8 +21,8 @@ type resInfo[T any] struct {
 	createTime time.Time //创建时间
 }
 
-// ConnPool 资源池结构体，传入参数
-type ConnPool[T any] struct {
+// ConnConfig 资源池结构体，传入参数
+type ConnConfig[T any] struct {
 	MaxSize   int               // 最大资源数量
 	MaxUsage  time.Duration     // 资源最大使用时间
 	New       func() (T, error) // 创建新资源的函数
@@ -30,8 +30,8 @@ type ConnPool[T any] struct {
 	CloseFunc func(T) error     // 关闭资源的函数
 }
 
-type commPool[T any] struct {
-	ConnPool[T]
+type CommPool[T any] struct {
+	ConnConfig[T]
 
 	idle []*resInfo[T] // 空闲资源列表
 	used []*resInfo[T] // 已使用资源列表
@@ -40,9 +40,9 @@ type commPool[T any] struct {
 }
 
 // NewPoolConn 创建一个新的资源池
-func NewPoolConn[T any](connPool *ConnPool[T]) (*commPool[T], error) {
-	pool := new(commPool[T])
-	pool.ConnPool = *connPool
+func NewPoolConn[T any](connPool *ConnConfig[T]) *CommPool[T] {
+	pool := new(CommPool[T])
+	pool.ConnConfig = *connPool
 	if pool.MaxSize <= 0 {
 		pool.MaxSize = defaultMaxSize
 	}
@@ -50,7 +50,7 @@ func NewPoolConn[T any](connPool *ConnPool[T]) (*commPool[T], error) {
 		pool.MaxUsage = defaultMaxUsage
 	}
 	if pool.New == nil {
-		return nil, fmt.Errorf("new function is required")
+		panic("new function is required")
 	}
 	pool.idle = make([]*resInfo[T], 0, pool.MaxSize)
 	pool.used = make([]*resInfo[T], 0, pool.MaxSize)
@@ -75,11 +75,11 @@ func NewPoolConn[T any](connPool *ConnPool[T]) (*commPool[T], error) {
 		}, nil)
 	}
 
-	return pool, nil
+	return pool
 }
 
 // Get 从资源池获取一个资源
-func (p *commPool[T]) create() (*resInfo[T], error) {
+func (p *CommPool[T]) create() (*resInfo[T], error) {
 	//创建新的资源
 	conn, err := p.New()
 	if err != nil {
@@ -99,7 +99,7 @@ func (p *commPool[T]) create() (*resInfo[T], error) {
 }
 
 // Get 从资源池获取一个资源
-func (p *commPool[T]) Get() (*resInfo[T], error) {
+func (p *CommPool[T]) Get() (*resInfo[T], error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -115,12 +115,11 @@ func (p *commPool[T]) Get() (*resInfo[T], error) {
 		return resource, nil
 	}
 
-	//已经满了，则直接创建，使用短连接
 	resource, err := p.create()
 	if err != nil {
 		return nil, err
 	}
-
+	//已经满了，则直接创建，使用短连接
 	if len(p.used) == p.MaxSize {
 		p.once = append(p.once, resource)
 	} else {
@@ -131,7 +130,7 @@ func (p *commPool[T]) Get() (*resInfo[T], error) {
 }
 
 // Put 将资源释放回资源池
-func (p *commPool[T]) Put(res *resInfo[T]) {
+func (p *CommPool[T]) Put(res *resInfo[T]) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -170,7 +169,7 @@ func (p *commPool[T]) Put(res *resInfo[T]) {
 }
 
 // Close 关闭资源池中的所有资源
-func (p *commPool[T]) Close() {
+func (p *CommPool[T]) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -188,7 +187,7 @@ func (p *commPool[T]) Close() {
 }
 
 // checkIdleResources 定期检查空闲资源的有效性
-func (p *commPool[T]) checkIdleResources() {
+func (p *CommPool[T]) checkIdleResources() {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
@@ -236,7 +235,7 @@ func (p *commPool[T]) checkIdleResources() {
 }
 
 // checkMaxUsageResources 检查超时使用的函数
-func (p *commPool[T]) checkMaxUsageResources() {
+func (p *CommPool[T]) checkMaxUsageResources() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -267,7 +266,7 @@ func (p *commPool[T]) checkMaxUsageResources() {
 	}
 }
 
-func (p *commPool[T]) closeList(list ...*resInfo[T]) error {
+func (p *CommPool[T]) closeList(list ...*resInfo[T]) error {
 	var retErr error
 	lo.ForEach(list, func(item *resInfo[T], index int) {
 		if p.CloseFunc != nil {
