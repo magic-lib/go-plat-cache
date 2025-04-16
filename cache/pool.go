@@ -2,9 +2,11 @@ package cache
 
 import (
 	"fmt"
+	"github.com/magic-lib/go-plat-utils/cond"
 	"github.com/magic-lib/go-plat-utils/goroutines"
 	"github.com/magic-lib/go-plat-utils/id-generator/id"
 	"github.com/magic-lib/go-plat-utils/utils"
+	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/samber/lo"
 	"sync"
 	"time"
@@ -33,10 +35,12 @@ type ResPoolConfig[T any] struct {
 type CommPool[T any] struct {
 	ResPoolConfig[T]
 
-	idle []*resInfo[T] // 空闲资源列表
-	used []*resInfo[T] // 已使用资源列表
-	once []*resInfo[T] // 一次性资源列表
-	mu   sync.RWMutex
+	idle       cmap.ConcurrentMap[string, *resInfo[T]] // 空闲资源列表
+	used       cmap.ConcurrentMap[string, *resInfo[T]] // 已使用资源列表
+	once       cmap.ConcurrentMap[string, *resInfo[T]] // 一次性资源列表
+	delayClose cmap.ConcurrentMap[string, *resInfo[T]] // 延迟删除资源列表，避免将正在使用的删除掉了
+
+	mu sync.RWMutex
 }
 
 // NewResPool 创建一个新的资源池
@@ -52,16 +56,17 @@ func NewResPool[T any](connPool *ResPoolConfig[T]) *CommPool[T] {
 	if pool.New == nil {
 		panic("new function is required")
 	}
-	pool.idle = make([]*resInfo[T], 0, pool.MaxSize)
-	pool.used = make([]*resInfo[T], 0, pool.MaxSize)
-	pool.once = make([]*resInfo[T], 0)
+	pool.idle = cmap.New[*resInfo[T]]()
+	pool.used = cmap.New[*resInfo[T]]()
+	pool.once = cmap.New[*resInfo[T]]()
+	pool.delayClose = cmap.New[*resInfo[T]]()
 
 	// 默认放一个，用来检测是否可以创建
 	resource, err := pool.create()
 	if err != nil {
 		fmt.Println("NewResPool error:", err.Error())
 	} else {
-		pool.idle = append(pool.idle, resource)
+		pool.idle.Set(resource.id, resource)
 	}
 
 	if pool.CheckFunc != nil {
@@ -69,11 +74,12 @@ func NewResPool[T any](connPool *ResPoolConfig[T]) *CommPool[T] {
 			pool.checkIdleResources()
 		}, nil)
 	}
-	if pool.MaxUsage > 0 {
-		goroutines.GoAsync(func(params ...any) {
-			pool.checkMaxUsageResources()
-		}, nil)
-	}
+	goroutines.GoAsync(func(params ...any) {
+		pool.checkMaxUsageResources()
+	}, nil)
+	goroutines.GoAsync(func(params ...any) {
+		pool.checkDelayCloseResources()
+	}, nil)
 
 	return pool
 }
@@ -100,19 +106,23 @@ func (p *CommPool[T]) create() (*resInfo[T], error) {
 
 // Get 从资源池获取一个资源
 func (p *CommPool[T]) Get() (*resInfo[T], error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.idle == nil || p.used == nil {
-		return nil, fmt.Errorf("resource pool is closed")
-	}
 	//如果存在空闲资源，直接返回
-	if len(p.idle) > 0 {
-		resource := p.idle[0]
-		resource.usedTime = time.Now()
-		p.idle = p.idle[1:]
-		p.used = append(p.used, resource)
-		return resource, nil
+	if !p.idle.IsEmpty() {
+		keyList := p.idle.Keys()
+		var retResource *resInfo[T]
+		lo.ForEachWhile(keyList, func(item string, index int) bool {
+			if resource, ok := p.idle.Get(item); ok {
+				resource.usedTime = time.Now()
+				retResource = resource
+				p.used.Set(resource.id, resource)
+				p.idle.Remove(item)
+				return false
+			}
+			return true
+		})
+		if retResource != nil {
+			return retResource, nil
+		}
 	}
 
 	resource, err := p.create()
@@ -120,10 +130,10 @@ func (p *CommPool[T]) Get() (*resInfo[T], error) {
 		return nil, err
 	}
 	//已经满了，则直接创建，使用短连接
-	if len(p.used) == p.MaxSize {
-		p.once = append(p.once, resource)
+	if p.used.Count() == p.MaxSize {
+		p.once.Set(resource.id, resource)
 	} else {
-		p.used = append(p.used, resource)
+		p.used.Set(resource.id, resource)
 	}
 
 	return resource, nil
@@ -131,59 +141,50 @@ func (p *CommPool[T]) Get() (*resInfo[T], error) {
 
 // Put 将资源释放回资源池
 func (p *CommPool[T]) Put(res *resInfo[T]) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	//已关闭，直接释放资源
-	if p.idle == nil || p.used == nil {
-		_ = p.closeList(res)
+	if p.used.Has(res.id) {
+		p.used.Remove(res.id)
+		p.idle.Set(res.id, res)
 		return
 	}
-	usedFind := false
-	lo.ForEachWhile(p.used, func(item *resInfo[T], index int) bool {
-		if item.id == res.id {
-			res.usedTime = time.Time{}
-			p.used = append(p.used[:index], p.used[index+1:]...)
-			p.idle = append(p.idle, res)
-			usedFind = true
-			return false
-		}
-		return true
-	})
 	// 如果没有找到，可能是一次性资源，从一次性资源列表中移除
-	if !usedFind {
-		lo.ForEachWhile(p.once, func(item *resInfo[T], index int) bool {
-			if item.id == res.id {
-				p.once = append(p.once[:index], p.once[index+1:]...)
-				//检查idle数量，是否可以重用，超过最大数量，则直接关闭
-				if len(p.idle)+len(p.used) < p.MaxSize {
-					p.idle = append(p.idle, res)
-					return false
-				}
-				_ = p.closeList(item)
-				return false
-			}
-			return true
-		})
+	if p.once.Has(res.id) {
+		p.once.Remove(res.id)
+		if p.idle.Count()+p.used.Count() < p.MaxSize {
+			p.idle.Set(res.id, res)
+			return
+		}
 	}
+	if p.idle.Has(res.id) {
+		return
+	}
+	// 超出最大资源数量，直接关闭
+	_ = p.closeList(true, res)
+}
+
+// Exec 将资源释放回资源池
+func (p *CommPool[T]) Exec(fun func(c T) error) error {
+	res, err := p.Get()
+	if err != nil {
+		return err
+	}
+	defer p.Put(res)
+	return fun(res.Resource)
 }
 
 // Close 关闭资源池中的所有资源
 func (p *CommPool[T]) Close() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.idle == nil || p.used == nil {
-		return
-	}
-
-	_ = p.closeList(p.idle...)
-	_ = p.closeList(p.used...)
-	_ = p.closeList(p.once...)
-
-	p.idle = nil
-	p.used = nil
-	p.once = make([]*resInfo[T], 0)
+	p.idle.IterCb(func(key string, val *resInfo[T]) {
+		_ = p.closeList(false, val)
+	})
+	p.used.IterCb(func(key string, val *resInfo[T]) {
+		_ = p.closeList(false, val)
+	})
+	p.once.IterCb(func(key string, val *resInfo[T]) {
+		_ = p.closeList(false, val)
+	})
+	p.idle.Clear()
+	p.used.Clear()
+	p.once.Clear()
 }
 
 // checkIdleResources 定期检查空闲资源的有效性
@@ -195,41 +196,32 @@ func (p *CommPool[T]) checkIdleResources() {
 		select {
 		case <-ticker.C:
 			errList := make([]*resInfo[T], 0)
-			lo.ForEach(p.idle, func(item *resInfo[T], index int) {
-				err := p.CheckFunc(item.Resource)
+			p.idle.IterCb(func(key string, val *resInfo[T]) {
+				err := p.CheckFunc(val.Resource)
 				if err != nil {
 					fmt.Printf("error checking idle resource: %v\n", err)
-					errList = append(errList, item)
+					errList = append(errList, val)
 				}
 			})
+
 			//无失效情况，则跳过
 			if len(errList) == 0 {
 				continue
 			}
 			// 移除无效资源
-			p.mu.Lock()
-
 			lo.ForEach(errList, func(item *resInfo[T], _ int) {
 				// 尝试创建新资源
 				resource, err := p.create()
 				if err != nil {
 					return
 				}
-				lo.ForEachWhile(p.idle, func(oldItem *resInfo[T], i int) bool {
-					if item.id == oldItem.id {
-						// 移除资源
-						p.idle = append(p.idle[:i], p.idle[i+1:]...)
-						p.idle = append(p.idle, resource)
-						if p.CloseFunc != nil { //把失效的关闭
-							_ = p.CloseFunc(oldItem.Resource)
-						}
-						return false
-					}
-					return true
-				})
-			})
 
-			p.mu.Unlock()
+				if p.idle.Has(item.id) {
+					p.idle.Set(resource.id, resource)
+					p.idle.Remove(item.id)
+					_ = p.closeList(false, item)
+				}
+			})
 		}
 	}
 }
@@ -243,12 +235,12 @@ func (p *CommPool[T]) checkMaxUsageResources() {
 		select {
 		case <-ticker.C:
 			expiredResources := make([]*resInfo[T], 0)
-			lo.ForEach(p.used, func(item *resInfo[T], i int) {
+			p.used.IterCb(func(key string, item *resInfo[T]) {
 				if time.Since(item.usedTime) > p.MaxUsage {
 					expiredResources = append(expiredResources, item)
 				}
 			})
-			lo.ForEach(p.once, func(item *resInfo[T], i int) {
+			p.once.IterCb(func(key string, item *resInfo[T]) {
 				if time.Since(item.usedTime) > p.MaxUsage {
 					expiredResources = append(expiredResources, item)
 				}
@@ -256,24 +248,49 @@ func (p *CommPool[T]) checkMaxUsageResources() {
 			if len(expiredResources) == 0 {
 				continue
 			}
-			p.mu.Lock()
 			//可能忘记调用Put方法，需要放入空闲列表中
 			lo.ForEach(expiredResources, func(item *resInfo[T], i int) {
-				p.Put(item)
+				if item != nil {
+					p.Put(item)
+				}
 			})
-			p.mu.Unlock()
 		}
 	}
 }
 
-func (p *CommPool[T]) closeList(list ...*resInfo[T]) error {
+// checkDelayCloseResources 检查延迟删除使用的函数,避免正在使用时，突然就关闭了
+func (p *CommPool[T]) checkDelayCloseResources() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			p.delayClose.IterCb(func(key string, item *resInfo[T]) {
+				if time.Since(item.usedTime) > p.MaxUsage {
+					_ = p.closeList(true, item)
+					p.delayClose.Remove(key)
+				}
+			})
+		}
+	}
+}
+
+func (p *CommPool[T]) closeList(nowClose bool, list ...*resInfo[T]) error {
 	var retErr error
 	lo.ForEach(list, func(item *resInfo[T], index int) {
 		if p.CloseFunc != nil {
-			err := p.CloseFunc(item.Resource)
-			if err != nil {
-				fmt.Printf("error closing resource: %v\n", err)
-				retErr = err
+			if nowClose {
+				err := p.CloseFunc(item.Resource)
+				if err != nil {
+					fmt.Printf("error closing resource: %v\n", err)
+					retErr = err
+				}
+			} else {
+				if cond.IsZero(item.usedTime) {
+					item.usedTime = time.Now()
+				}
+				p.delayClose.Set(item.id, item)
 			}
 		}
 	})
