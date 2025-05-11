@@ -221,7 +221,7 @@ func (c *cacheIns[P, V]) lockExecuteListHandler(ctx context.Context, wait bool, 
 		paramList = append(paramList, v)
 	}
 
-	_, getErr := goroutines.AsyncExecuteDataList(10*time.Minute, paramList, func(key int, value P) (bool, error) {
+	_, getErr := goroutines.AsyncExecuteDataList(10*time.Minute, paramList, func(value P, key int) (bool, error) {
 		oneCacheKey := keyList[key]
 		oneDataParam := value
 		retData, err := c.exeOneFunction(ctx, wait, oneCacheKey, oneDataParam)
