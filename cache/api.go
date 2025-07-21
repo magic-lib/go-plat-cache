@@ -41,4 +41,5 @@ var (
 	_ CommCache[string] = (*redisCache[string])(nil)
 	_ CommCache[any]    = (*memGoCache[any])(nil)
 	_ CommCache[any]    = (*memLruCache[any])(nil)
+	_ CommCache[string] = (*diskCache[string])(nil)
 )
