@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+type DataWithExpiry struct {
+	Data   string
+	Expiry time.Time
+}
+
 type diskCache[V any] struct {
 	diskCache *diskcache.Cache
 }
@@ -23,14 +28,28 @@ func NewDiskCache[V string](basePath string) *diskCache[string] {
 func (co *diskCache[V]) Get(_ context.Context, key string) (v string, err error) {
 	ret, ok := co.diskCache.Get(key)
 	if ok {
-		return string(ret), nil
+		var dataWithExpiryRead DataWithExpiry
+		err = conv.Unmarshal(ret, &dataWithExpiryRead)
+		if err != nil {
+			return "", err
+		}
+		// 判断是否过期
+		if time.Now().After(dataWithExpiryRead.Expiry) {
+			co.diskCache.Delete(key)
+		}
+		return dataWithExpiryRead.Data, nil
 	}
 	return "", nil
 }
 
 // Set timeout无效
-func (co *diskCache[V]) Set(_ context.Context, key string, val string, _ time.Duration) (bool, error) {
-	co.diskCache.Set(key, []byte(conv.String(val)))
+func (co *diskCache[V]) Set(_ context.Context, key string, val string, timeout time.Duration) (bool, error) {
+	dataWithExpiry := DataWithExpiry{
+		Data:   val,
+		Expiry: time.Now().Add(timeout),
+	}
+	serialized := conv.String(dataWithExpiry)
+	co.diskCache.Set(key, []byte(serialized))
 	return true, nil
 }
 
