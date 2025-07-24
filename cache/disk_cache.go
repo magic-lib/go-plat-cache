@@ -6,6 +6,7 @@ import (
 	"github.com/gregjones/httpcache/diskcache"
 	"github.com/magic-lib/go-plat-utils/conv"
 	"github.com/magic-lib/go-plat-utils/goroutines"
+	"github.com/peterbourgon/diskv"
 	"os"
 	"path/filepath"
 	"time"
@@ -21,6 +22,8 @@ const (
 	defaultMaxExpireTime = 2 * 24 * time.Hour
 )
 
+var basePathMap = make(map[string]bool) //避免同一个目录，多个清理程序同时运行
+
 type diskCache[V any] struct {
 	diskCache     *diskcache.Cache
 	basePath      string
@@ -29,7 +32,18 @@ type diskCache[V any] struct {
 
 // NewDiskCache 新建diskCache
 func NewDiskCache[V string](basePath string, maxExpireTime time.Duration) *diskCache[string] {
-	diskCacheInstance := diskcache.New(basePath)
+	diskCacheInstance := diskcache.NewWithDiskv(diskv.New(diskv.Options{
+		BasePath: basePath,
+		Transform: func(key string) []string {
+			cacheDir := make([]string, 0)
+			// 取前2位作为一级目录，接下来2位作为二级目录
+			if len(key) >= 4 {
+				return append(cacheDir, key[:2], key[2:4])
+			}
+			return cacheDir
+		},
+		CacheSizeMax: 100 * 1024 * 1024, // 100MB
+	}))
 	if maxExpireTime < defaultMaxExpireTime {
 		maxExpireTime = defaultMaxExpireTime
 	}
@@ -44,6 +58,12 @@ func NewDiskCache[V string](basePath string, maxExpireTime time.Duration) *diskC
 }
 
 func (co *diskCache[V]) autoCleanExpiredFiles() {
+	if _, ok := basePathMap[co.basePath]; ok {
+		return
+	}
+	defer func() {
+		basePathMap[co.basePath] = true
+	}()
 	goroutines.GoAsync(func(params ...any) {
 		cot := params[0].(*diskCache[V])
 		for {
@@ -51,14 +71,14 @@ func (co *diskCache[V]) autoCleanExpiredFiles() {
 			if err := cot.cleanExpiredFiles(co.basePath, co.maxExpireTime); err != nil {
 				fmt.Printf("清理错误: %v\n", err)
 			}
-			<-time.After(checkInterval)
+			time.Sleep(checkInterval)
 		}
 	}, co)
 }
 
 // 清理过期文件（包括子目录）
 func (co *diskCache[V]) cleanExpiredFiles(rootDir string, maxAge time.Duration) error {
-	expiryTime := time.Now().Add(-maxAge)
+	//expiryTime := time.Now().Add(-maxAge)
 	deletedCount := 0
 
 	// 递归遍历所有文件和子目录
@@ -66,25 +86,33 @@ func (co *diskCache[V]) cleanExpiredFiles(rootDir string, maxAge time.Duration) 
 		if err != nil {
 			return fmt.Errorf("访问路径失败: %s, 错误: %w", path, err)
 		}
-
-		// 跳过根目录本身
-		if path == rootDir {
-			return nil
-		}
-
 		// 如果是目录，先不处理（等处理完子文件再判断是否删除空目录）
-		if info.IsDir() {
+		if info.IsDir() || path == rootDir {
 			return nil
 		}
 
-		// 检查文件是否过期（使用修改时间判断）
-		if info.ModTime().Before(expiryTime) {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			err = os.Remove(path)
+			fmt.Printf("删除文件失败1: %s, 错误: %v \n", path, err)
+			return nil
+		}
+		var dataWithExpiryRead DataWithExpiry
+		err = conv.Unmarshal(string(content), &dataWithExpiryRead)
+		if err != nil {
+			err = os.Remove(path)
+			fmt.Printf("删除文件失败2: %s, 错误: %v \n", path, err)
+			return nil
+		}
+
+		if time.Now().After(dataWithExpiryRead.Expiry) {
 			if err := os.Remove(path); err != nil {
 				return fmt.Errorf("删除文件失败: %s, 错误: %w", path, err)
 			}
 			deletedCount++
 			fmt.Printf("已删除过期文件: %s (修改时间: %s)\n",
 				path, info.ModTime().Format("2006-01-02 15:04:05"))
+			return nil
 		}
 		return nil
 	})
