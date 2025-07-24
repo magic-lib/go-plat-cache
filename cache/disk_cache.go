@@ -21,6 +21,8 @@ const (
 	defaultMaxExpireTime = 2 * 24 * time.Hour
 )
 
+var basePathMap = make(map[string]bool) //避免同一个目录，多个清理程序同时运行
+
 type diskCache[V any] struct {
 	diskCache     *diskcache.Cache
 	basePath      string
@@ -44,6 +46,12 @@ func NewDiskCache[V string](basePath string, maxExpireTime time.Duration) *diskC
 }
 
 func (co *diskCache[V]) autoCleanExpiredFiles() {
+	if _, ok := basePathMap[co.basePath]; ok {
+		return
+	}
+	defer func() {
+		basePathMap[co.basePath] = true
+	}()
 	goroutines.GoAsync(func(params ...any) {
 		cot := params[0].(*diskCache[V])
 		for {
@@ -51,7 +59,7 @@ func (co *diskCache[V]) autoCleanExpiredFiles() {
 			if err := cot.cleanExpiredFiles(co.basePath, co.maxExpireTime); err != nil {
 				fmt.Printf("清理错误: %v\n", err)
 			}
-			<-time.After(checkInterval)
+			time.Sleep(checkInterval)
 		}
 	}, co)
 }
