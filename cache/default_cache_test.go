@@ -56,3 +56,15 @@ func TestBatchExec(t *testing.T) {
 		}
 	})
 }
+
+func TestNewDiskCache(t *testing.T) {
+	client := cache.NewDiskCache("/Users/tianlin0/Downloads/cache/cache-data", 5*time.Minute)
+
+	_, _ = client.Set(nil, "aaa", "bbb", 5*time.Second)
+	_, _ = client.Set(nil, "ccc", "bbb", 5*time.Second)
+
+	time.Sleep(6 * time.Second)
+
+	//_, _ = client.Del(nil, "aaa")
+
+}
