@@ -4,10 +4,11 @@ go 1.24.1
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/magic-lib/go-plat-startupcfg v1.20250405.1
-	github.com/magic-lib/go-plat-utils v1.20250721.3-0.20250826082500-e94890cea264
+	github.com/magic-lib/go-plat-utils v1.20250721.3-0.20250906010435-73b1af97f08e
 	github.com/orcaman/concurrent-map v1.0.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
@@ -18,6 +19,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.0 // indirect
