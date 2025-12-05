@@ -31,7 +31,7 @@ type diskCache[V any] struct {
 }
 
 // NewDiskCache 新建diskCache
-func NewDiskCache[V string](basePath string, maxExpireTime time.Duration) *diskCache[string] {
+func NewDiskCache[V any](basePath string, maxExpireTime time.Duration) CommCache[V] {
 	diskCacheInstance := diskcache.NewWithDiskv(diskv.New(diskv.Options{
 		BasePath: basePath,
 		Transform: func(key string) []string {
@@ -47,7 +47,7 @@ func NewDiskCache[V string](basePath string, maxExpireTime time.Duration) *diskC
 	if maxExpireTime < defaultMaxExpireTime {
 		maxExpireTime = defaultMaxExpireTime
 	}
-	co := &diskCache[string]{
+	co := &diskCache[V]{
 		basePath:      basePath,
 		diskCache:     diskCacheInstance,
 		maxExpireTime: maxExpireTime,
@@ -94,14 +94,18 @@ func (co *diskCache[V]) cleanExpiredFiles(rootDir string, maxAge time.Duration) 
 		content, err := os.ReadFile(path)
 		if err != nil {
 			err = os.Remove(path)
-			fmt.Printf("删除文件失败1: %s, 错误: %v \n", path, err)
+			if err != nil {
+				fmt.Printf("删除文件失败1: %s, 错误: %v \n", path, err)
+			}
 			return nil
 		}
 		var dataWithExpiryRead DataWithExpiry
 		err = conv.Unmarshal(string(content), &dataWithExpiryRead)
 		if err != nil {
 			err = os.Remove(path)
-			fmt.Printf("删除文件失败2: %s, 错误: %v \n", path, err)
+			if err != nil {
+				fmt.Printf("删除文件失败2: %s, 错误: %v \n", path, err)
+			}
 			return nil
 		}
 
@@ -148,28 +152,29 @@ func (co *diskCache[V]) cleanExpiredFiles(rootDir string, maxAge time.Duration) 
 }
 
 // Get 从缓存中取得一个值
-func (co *diskCache[V]) Get(_ context.Context, key string) (v string, err error) {
+func (co *diskCache[V]) Get(_ context.Context, key string) (V, error) {
 	ret, ok := co.diskCache.Get(key)
-	if ok {
-		var dataWithExpiryRead DataWithExpiry
-		err = conv.Unmarshal(ret, &dataWithExpiryRead)
-		if err != nil {
-			return "", err
-		}
-		// 判断是否过期
-		if time.Now().After(dataWithExpiryRead.Expiry) {
-			co.diskCache.Delete(key)
-			return "", nil
-		}
-		return dataWithExpiryRead.Data, nil
+	var zero V
+	if !ok {
+		return zero, nil
 	}
-	return "", nil
+	var dataWithExpiryRead DataWithExpiry
+	err := conv.Unmarshal(ret, &dataWithExpiryRead)
+	if err != nil {
+		return zero, err
+	}
+	// 判断是否过期
+	if time.Now().After(dataWithExpiryRead.Expiry) {
+		co.diskCache.Delete(key)
+		return zero, nil
+	}
+	return strToVal[V](dataWithExpiryRead.Data)
 }
 
 // Set timeout无效
-func (co *diskCache[V]) Set(_ context.Context, key string, val string, timeout time.Duration) (bool, error) {
+func (co *diskCache[V]) Set(_ context.Context, key string, val V, timeout time.Duration) (bool, error) {
 	dataWithExpiry := DataWithExpiry{
-		Data:   val,
+		Data:   conv.String(val),
 		Expiry: time.Now().Add(timeout),
 	}
 	serialized := conv.String(dataWithExpiry)

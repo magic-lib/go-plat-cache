@@ -48,7 +48,7 @@ func getRealRedisConfig(redisCfg ...*startupcfg.RedisConfig) *startupcfg.RedisCo
 }
 
 // NewRedisCache 新建
-func NewRedisCache[V string](redisCfg ...*startupcfg.RedisConfig) (*redisCache[V], error) {
+func NewRedisCache[V any](redisCfg ...*startupcfg.RedisConfig) (CommCache[V], error) {
 	oneCfg := getRealRedisConfig(redisCfg...)
 	if oneCfg != nil {
 		return &redisCache[V]{
@@ -60,8 +60,13 @@ func NewRedisCache[V string](redisCfg ...*startupcfg.RedisConfig) (*redisCache[V
 }
 
 // Get 从缓存中取得一个值
-func (co *redisCache[V]) Get(ctx context.Context, key string) (string, error) {
-	return co.rc.Get(getContext(ctx), key)
+func (co *redisCache[V]) Get(ctx context.Context, key string) (V, error) {
+	dataStr, err := co.rc.Get(getContext(ctx), key)
+	if err != nil {
+		var zero V
+		return zero, err
+	}
+	return strToVal[V](dataStr)
 }
 
 // Set timeout为秒

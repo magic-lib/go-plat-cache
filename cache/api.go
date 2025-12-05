@@ -37,9 +37,10 @@ func NsDel[V any](ctx context.Context, co CommCache[V], ns string, key string) (
 }
 
 var (
-	_ CommCache[any]    = (*defaultCache[any])(nil)
-	_ CommCache[string] = (*redisCache[string])(nil)
-	_ CommCache[any]    = (*memGoCache[any])(nil)
-	_ CommCache[any]    = (*memLruCache[any])(nil)
-	_ CommCache[string] = (*diskCache[string])(nil)
+	_ CommCache[any] = (*defaultCache[any])(nil)
+	_ CommCache[any] = (*redisCache[any])(nil)
+	_ CommCache[any] = (*memGoCache[any])(nil)
+	_ CommCache[any] = (*memLruCache[any])(nil)
+	_ CommCache[any] = (*diskCache[any])(nil)
+	_ CommCache[any] = (*mySQLCache[any])(nil)
 )

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/magic-lib/go-plat-utils/conv"
 	cmap "github.com/orcaman/concurrent-map/v2"
-	"reflect"
 	"sync"
 	"time"
 
@@ -25,8 +24,8 @@ type MySQLCacheConfig struct {
 	Namespace string `json:"namespace"`
 }
 
-// MySQLCache 基于MySQL实现的缓存
-type MySQLCache[V any] struct {
+// mySQLCache 基于MySQL实现的缓存
+type mySQLCache[V any] struct {
 	dsn string
 	db  *sql.DB
 	// 缓存表名，可在初始化时指定
@@ -35,7 +34,7 @@ type MySQLCache[V any] struct {
 }
 
 // NewMySQLCache 创建MySQL缓存实例
-func NewMySQLCache[V any](cfg *MySQLCacheConfig) (*MySQLCache[V], error) {
+func NewMySQLCache[V any](cfg *MySQLCacheConfig) (CommCache[V], error) {
 	if cfg.SqlDB == nil {
 		if cfg.DSN != "" {
 			sqlDB, err := sql.Open("mysql", cfg.DSN)
@@ -55,7 +54,7 @@ func NewMySQLCache[V any](cfg *MySQLCacheConfig) (*MySQLCache[V], error) {
 		CREATE TABLE IF NOT EXISTS %s (
 			namespace VARCHAR(50) NOT NULL,
 			cache_key VARCHAR(255) NOT NULL,
-			cache_value TEXT NOT NULL,
+			cache_value JSON NOT NULL,
 			expire_time DATETIME DEFAULT NULL,
 			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -68,7 +67,7 @@ func NewMySQLCache[V any](cfg *MySQLCacheConfig) (*MySQLCache[V], error) {
 		return nil, fmt.Errorf("创建缓存表失败: %v", err)
 	}
 
-	mysqlCache := &MySQLCache[V]{
+	mysqlCache := &mySQLCache[V]{
 		db:        cfg.SqlDB,
 		tableName: cfg.TableName,
 		namespace: cfg.Namespace,
@@ -88,7 +87,7 @@ func NewMySQLCache[V any](cfg *MySQLCacheConfig) (*MySQLCache[V], error) {
 }
 
 // Get 从缓存中获取值
-func (c *MySQLCache[V]) Get(ctx context.Context, key string) (V, error) {
+func (c *mySQLCache[V]) Get(ctx context.Context, key string) (V, error) {
 	var (
 		valueStr string
 		expireAt sql.NullTime
@@ -106,24 +105,11 @@ func (c *MySQLCache[V]) Get(ctx context.Context, key string) (V, error) {
 		return zero, fmt.Errorf("查询缓存失败: %v", err)
 	}
 	// 反序列化JSON为指定类型
-	var value V
-	newValuePtr := conv.NewPtrByType(reflect.TypeOf(value))
-	if err = conv.Unmarshal(valueStr, newValuePtr); err != nil {
-		var zero V
-		return zero, fmt.Errorf("反序列化缓存值失败: %v", err)
-	}
-	if v, ok := newValuePtr.(V); ok {
-		return v, nil
-	}
-	if ptr, ok := newValuePtr.(*V); ok {
-		return *ptr, nil
-	}
-
-	return value, nil
+	return strToVal[V](valueStr)
 }
 
 // Set 向缓存中设置值，支持过期时间
-func (c *MySQLCache[V]) Set(ctx context.Context, key string, val V, timeout time.Duration) (bool, error) {
+func (c *mySQLCache[V]) Set(ctx context.Context, key string, val V, timeout time.Duration) (bool, error) {
 	valueStr := conv.String(val)
 	if timeout == 0 {
 		timeout = defaultMaxExpireTime
@@ -152,7 +138,7 @@ func (c *MySQLCache[V]) Set(ctx context.Context, key string, val V, timeout time
 }
 
 // Del 从缓存中删除键
-func (c *MySQLCache[V]) Del(ctx context.Context, key string) (bool, error) {
+func (c *mySQLCache[V]) Del(ctx context.Context, key string) (bool, error) {
 	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE namespace=? AND cache_key = ?", c.tableName)
 	result, err := c.db.ExecContext(ctx, deleteSQL, c.namespace, key)
 	if err != nil {
@@ -167,7 +153,7 @@ func (c *MySQLCache[V]) Del(ctx context.Context, key string) (bool, error) {
 }
 
 // startCleanupJob 添加定时清理过期键的方法
-func (c *MySQLCache[V]) startCleanupJob(interval time.Duration) {
+func (c *mySQLCache[V]) startCleanupJob(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		for {
