@@ -89,13 +89,16 @@ func NewMySQLCache[V any](cfg *MySQLCacheConfig) (CommCache[V], error) {
 // Get 从缓存中获取值
 func (c *mySQLCache[V]) Get(ctx context.Context, key string) (V, error) {
 	var (
-		valueStr string
-		expireAt sql.NullTime
+		valueStr    string
+		expireBytes []byte
 	)
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// 查询时自动过滤已过期的键
 	querySQL := fmt.Sprintf(`SELECT cache_value, expire_time FROM %s WHERE namespace=? AND cache_key = ? AND (expire_time IS NULL OR expire_time > NOW()) LIMIT 1`, c.tableName)
-	err := c.db.QueryRowContext(ctx, querySQL, c.namespace, key).Scan(&valueStr, &expireAt)
+	err := c.db.QueryRowContext(ctx, querySQL, c.namespace, key).Scan(&valueStr, &expireBytes)
 	if err != nil {
 		var zero V
 		if errors.Is(err, sql.ErrNoRows) {
@@ -110,6 +113,10 @@ func (c *mySQLCache[V]) Get(ctx context.Context, key string) (V, error) {
 
 // Set 向缓存中设置值，支持过期时间
 func (c *mySQLCache[V]) Set(ctx context.Context, key string, val V, timeout time.Duration) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	valueStr := conv.String(val)
 	if timeout == 0 {
 		timeout = defaultMaxExpireTime
@@ -139,6 +146,9 @@ func (c *mySQLCache[V]) Set(ctx context.Context, key string, val V, timeout time
 
 // Del 从缓存中删除键
 func (c *mySQLCache[V]) Del(ctx context.Context, key string) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE namespace=? AND cache_key = ?", c.tableName)
 	result, err := c.db.ExecContext(ctx, deleteSQL, c.namespace, key)
 	if err != nil {
@@ -159,7 +169,7 @@ func (c *mySQLCache[V]) startCleanupJob(interval time.Duration) {
 		for {
 			select {
 			case <-ticker.C:
-				cleanSQL := fmt.Sprintf("DELETE FROM %s WHERE expire_time IS NOT NULL AND expire_time <= NOW()", c.tableName)
+				cleanSQL := fmt.Sprintf("DELETE FROM %s WHERE expire_time IS NOT NULL AND expire_time < NOW()", c.tableName)
 				_, err := c.db.Exec(cleanSQL)
 				if err != nil {
 					// 实际应用中建议使用日志库记录错误

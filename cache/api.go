@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"github.com/magic-lib/go-plat-utils/conv"
 	"time"
 )
 
@@ -19,6 +20,18 @@ func getNsKey(ns string, key string) string {
 		return fmt.Sprintf("{%s}%s", ns, key)
 	}
 	return key
+}
+
+func NsGetStr[V any](ctx context.Context, co CommCache[string], ns string, key string) (V, error) {
+	retStr, err := co.Get(ctx, getNsKey(ns, key))
+	if err != nil {
+		var zero V
+		return zero, err
+	}
+	return strToVal[V](retStr)
+}
+func NsSetStr[V any](ctx context.Context, co CommCache[string], ns string, key string, val V, timeout time.Duration) (bool, error) {
+	return co.Set(ctx, getNsKey(ns, key), conv.String(val), timeout)
 }
 
 // NsGet xxx
