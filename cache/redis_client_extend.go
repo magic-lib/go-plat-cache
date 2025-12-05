@@ -60,15 +60,15 @@ func getRedisFromCfg(redisCfg *startupcfg.RedisConfig) (*redis.Client, error) {
 
 func getRedisOption(redisCfg startupcfg.Database, poolSize int) *redis.Options {
 	dialOpt := &redis.Options{}
-	if dataInt, ok := conv.Int64(redisCfg.DatabaseName()); ok {
-		dialOpt.DB = int(dataInt)
+	if dataInt, err1 := conv.Convert[int](redisCfg.DatabaseName()); err1 == nil {
+		dialOpt.DB = dataInt
 	}
 	dialOpt.Username = redisCfg.User()
 	dialOpt.Password = redisCfg.Password()
 
 	if oneTls, ok := redisCfg.Extend("tls"); ok {
-		tlsBool, ok := conv.Bool(oneTls)
-		if ok && tlsBool {
+		tlsBool, err1 := conv.Convert[bool](oneTls)
+		if err1 == nil && tlsBool {
 			tlsConfig := &tls.Config{
 				InsecureSkipVerify: true,
 			}

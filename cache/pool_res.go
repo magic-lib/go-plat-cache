@@ -25,8 +25,9 @@ type resInfo[T any] struct {
 
 // ResPoolConfig 资源池结构体，传入参数
 type ResPoolConfig[T any] struct {
-	MaxSize   int               // 最大资源数量
-	MaxUsage  time.Duration     // 资源最大使用时间
+	MaxSize  int           // 最大资源数量
+	MaxUsage time.Duration // 资源最大使用时间
+	//AllowMultiple bool              //是否调用多次创建多个多个资源
 	New       func() (T, error) // 创建新资源的函数
 	CheckFunc func(T) error     // 检查资源有效的函数
 	CloseFunc func(T) error     // 关闭资源的函数

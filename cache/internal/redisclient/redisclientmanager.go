@@ -40,7 +40,7 @@ func getClient(r *startupcfg.RedisConfig) (*red.Client, error) {
 				InsecureSkipVerify: true,
 			}
 		}
-		db, _ := conv.Int64(r.DatabaseName())
+		db, _ := conv.Convert[int64](r.DatabaseName())
 		store := red.NewClient(&red.Options{
 			Addr:         r.ServerAddress(),
 			Username:     r.User(),

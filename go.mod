@@ -8,7 +8,7 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/magic-lib/go-plat-startupcfg v1.20250405.1
-	github.com/magic-lib/go-plat-utils v1.20250721.3-0.20251030113044-7376d3d15621
+	github.com/magic-lib/go-plat-utils v1.20251105.2-0.20251205024507-7aae01534474
 	github.com/orcaman/concurrent-map v1.0.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
