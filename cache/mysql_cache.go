@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/magic-lib/go-plat-utils/cond"
 	"github.com/magic-lib/go-plat-utils/conv"
 	cmap "github.com/orcaman/concurrent-map/v2"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,14 +16,16 @@ import (
 )
 
 var (
-	onlyOneCleanMap = cmap.New[sync.Once]()
+	onlyOneCleanMap            = cmap.New[sync.Once]()
+	dontAutoCleanNamespaceList = cmap.New[[]string]()
 )
 
 type MySQLCacheConfig struct {
-	DSN       string
-	SqlDB     *sql.DB
-	TableName string `json:"table_name"`
-	Namespace string `json:"namespace"`
+	DSN            string
+	SqlDB          *sql.DB
+	TableName      string `json:"table_name"`
+	Namespace      string `json:"namespace"`
+	CloseAutoClean bool   `json:"close_auto_clean"` //关闭自动清理
 }
 
 // mySQLCache 基于MySQL实现的缓存
@@ -69,11 +73,26 @@ func NewMySQLCache[V any](cfg *MySQLCacheConfig) (CommCache[V], error) {
 
 	mysqlCache := &mySQLCache[V]{
 		db:        cfg.SqlDB,
+		dsn:       cfg.DSN,
 		tableName: cfg.TableName,
 		namespace: cfg.Namespace,
 	}
 
-	onlyKey := fmt.Sprintf("%s/%s", cfg.DSN, cfg.TableName)
+	onlyKey := mysqlCache.getCacheKey()
+	if cfg.CloseAutoClean {
+		if !dontAutoCleanNamespaceList.Has(onlyKey) {
+			dontAutoCleanNamespaceList.Set(onlyKey, []string{cfg.Namespace})
+			return mysqlCache, nil
+		}
+		if dontAutoCleanList, ok := dontAutoCleanNamespaceList.Get(onlyKey); ok {
+			if ok, _ = cond.Contains(dontAutoCleanList, cfg.Namespace); !ok {
+				dontAutoCleanList = append(dontAutoCleanList, cfg.Namespace)
+				dontAutoCleanNamespaceList.Set(onlyKey, dontAutoCleanList)
+			}
+		}
+		return mysqlCache, nil
+	}
+
 	if !onlyOneCleanMap.Has(onlyKey) {
 		onlyOneCleanMap.Set(onlyKey, sync.Once{})
 	}
@@ -162,6 +181,10 @@ func (c *mySQLCache[V]) Del(ctx context.Context, key string) (bool, error) {
 	return rowsAffected > 0, nil
 }
 
+func (c *mySQLCache[V]) getCacheKey() string {
+	return fmt.Sprintf("%s/%s", c.dsn, c.tableName)
+}
+
 // startCleanupJob 添加定时清理过期键的方法
 func (c *mySQLCache[V]) startCleanupJob(interval time.Duration) {
 	ticker := time.NewTicker(interval)
@@ -169,8 +192,21 @@ func (c *mySQLCache[V]) startCleanupJob(interval time.Duration) {
 		for {
 			select {
 			case <-ticker.C:
-				cleanSQL := fmt.Sprintf("DELETE FROM %s WHERE expire_time IS NOT NULL AND expire_time < NOW()", c.tableName)
-				_, err := c.db.Exec(cleanSQL)
+				onlyKey := c.getCacheKey()
+				var err error
+				if nameList, ok := dontAutoCleanNamespaceList.Get(onlyKey); !ok || len(nameList) == 0 {
+					cleanSQL := fmt.Sprintf("DELETE FROM %s WHERE expire_time IS NOT NULL AND expire_time < NOW()", c.tableName)
+					_, err = c.db.Exec(cleanSQL)
+				} else {
+					whereStr := make([]string, 0)
+					dataList := make([]any, 0)
+					for _, name := range nameList {
+						whereStr = append(whereStr, "?")
+						dataList = append(dataList, name)
+					}
+					cleanSQL := fmt.Sprintf("DELETE FROM %s WHERE expire_time IS NOT NULL AND expire_time < NOW() AND namespace NOT IN (%s)", c.tableName, strings.Join(whereStr, ","))
+					_, err = c.db.Exec(cleanSQL, dataList...)
+				}
 				if err != nil {
 					// 实际应用中建议使用日志库记录错误
 					fmt.Printf("清理过期缓存失败: %v\n", err)
