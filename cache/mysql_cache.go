@@ -110,14 +110,15 @@ func (c *mySQLCache[V]) Get(ctx context.Context, key string) (V, error) {
 	var (
 		valueStr    string
 		expireBytes []byte
+		nowBytes    []byte
 	)
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	// 查询时自动过滤已过期的键
-	querySQL := fmt.Sprintf(`SELECT cache_value, expire_time FROM %s WHERE namespace=? AND cache_key = ? AND (expire_time IS NULL OR expire_time > NOW()) LIMIT 1`, c.tableName)
-	err := c.db.QueryRowContext(ctx, querySQL, c.namespace, key).Scan(&valueStr, &expireBytes)
+	// 查询时自动过滤已过期的键 AND (expire_time IS NULL OR expire_time > NOW())
+	querySQL := fmt.Sprintf(`SELECT cache_value, expire_time, NOW() as now FROM %s WHERE namespace=? AND cache_key = ? LIMIT 1`, c.tableName)
+	err := c.db.QueryRowContext(ctx, querySQL, c.namespace, key).Scan(&valueStr, &expireBytes, &nowBytes)
 	if err != nil {
 		var zero V
 		if errors.Is(err, sql.ErrNoRows) {
@@ -127,6 +128,23 @@ func (c *mySQLCache[V]) Get(ctx context.Context, key string) (V, error) {
 		return zero, fmt.Errorf("查询缓存失败: %v", err)
 	}
 	// 反序列化JSON为指定类型
+	if expireBytes == nil { //表示没有设置过期时间
+		return strToVal[V](valueStr)
+	}
+	expTime, err1 := conv.Convert[time.Time](string(expireBytes))
+	nowTime, err2 := conv.Convert[time.Time](string(nowBytes))
+	if err1 != nil || err2 != nil {
+		var zero V
+		return zero, fmt.Errorf("时间转换失败: %v", err)
+	}
+	if expTime.Before(nowTime) {
+		v, err3 := strToVal[V](valueStr)
+		if err3 != nil {
+			return v, err3
+		}
+		return v, fmt.Errorf("缓存数据已过期")
+	}
+
 	return strToVal[V](valueStr)
 }
 
