@@ -140,14 +140,12 @@ func (c *mySQLCache[V]) Set(ctx context.Context, key string, val V, timeout time
 	if timeout == 0 {
 		timeout = defaultMaxExpireTime
 	}
-	// 计算过期时间
-	expireAt := time.Now().Add(timeout)
 
 	// 插入或更新缓存（UPSERT操作）
-	insertSQL := fmt.Sprintf(`INSERT INTO %s (namespace, cache_key, cache_value, expire_time) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE cache_value = VALUES(cache_value), expire_time = VALUES(expire_time), update_time = CURRENT_TIMESTAMP`, c.tableName)
+	insertSQL := fmt.Sprintf(`INSERT INTO %s (namespace, cache_key, cache_value, expire_time) VALUES (?, ?, ?, NOW() + INTERVAL ? SECOND) ON DUPLICATE KEY UPDATE cache_value = VALUES(cache_value), expire_time = VALUES(expire_time), update_time = CURRENT_TIMESTAMP`, c.tableName)
 
 	var args []interface{}
-	args = append(args, c.namespace, key, valueStr, expireAt)
+	args = append(args, c.namespace, key, valueStr, int64(timeout.Seconds())) //这样做是为了做续期的功能，如果不续期，保留原值，则使用 Value(expire_time)
 
 	result, err := c.db.ExecContext(ctx, insertSQL, args...)
 	if err != nil {
