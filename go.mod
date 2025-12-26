@@ -3,10 +3,12 @@ module github.com/magic-lib/go-plat-cache
 go 1.24.1
 
 require (
+	github.com/bits-and-blooms/bloom/v3 v3.7.1
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/hugh2632/bloomfilter v0.0.0-20220107050508-533b6738df0f
 	github.com/magic-lib/go-plat-startupcfg v1.20250405.1
 	github.com/magic-lib/go-plat-utils v1.20251105.2-0.20251205024507-7aae01534474
 	github.com/orcaman/concurrent-map v1.0.0
@@ -18,6 +20,8 @@ require (
 	github.com/samber/lo v1.49.1
 	github.com/timandy/routine v1.1.5
 	golang.org/x/sync v0.12.0
+	gorm.io/driver/mysql v1.1.0
+	gorm.io/gorm v1.21.10
 )
 
 require (
@@ -30,6 +34,7 @@ require (
 	github.com/andeya/ameda v1.5.3 // indirect
 	github.com/andeya/goutil v1.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/bits-and-blooms/bitset v1.24.2 // indirect
 	github.com/bytedance/go-tagexpr/v2 v2.9.11 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -51,6 +56,8 @@ require (
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/jimstudt/http-authentication v0.0.0-20140401203705-3eca13d6893a // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lqiz/expr v1.1.4 // indirect
