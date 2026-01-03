@@ -15,6 +15,10 @@ import (
 const defaultMaxSize = 10
 const defaultMaxUsage = 1 * time.Minute
 
+type Resource[T any] interface {
+	Get() T
+}
+
 // resInfo 用于记录资源及其获取时间
 type resInfo[T any] struct {
 	id         string    // 资源ID
@@ -22,6 +26,8 @@ type resInfo[T any] struct {
 	usedTime   time.Time //使用时间
 	createTime time.Time //创建时间
 }
+
+var _ Resource[any] = (*resInfo[any])(nil)
 
 // ResPoolConfig 资源池结构体，传入参数
 type ResPoolConfig[T any] struct {
@@ -42,6 +48,10 @@ type CommPool[T any] struct {
 	delayClose cmap.ConcurrentMap[string, *resInfo[T]] // 延迟删除资源列表，避免将正在使用的删除掉了
 
 	mu sync.RWMutex
+}
+
+func (p *resInfo[T]) Get() T {
+	return p.Resource
 }
 
 // NewResPool 创建一个新的资源池
@@ -92,20 +102,20 @@ func (p *CommPool[T]) create() (*resInfo[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	id := id.NewUUID()
-	if id == "" {
-		id = utils.RandomString(10)
+	idStr := id.NewUUID()
+	if idStr == "" {
+		idStr = utils.RandomString(10)
 	}
 
 	return &resInfo[T]{
-		id:         id,
+		id:         idStr,
 		Resource:   conn,
 		createTime: time.Now(),
 		usedTime:   time.Now(),
 	}, nil
 }
 
-// Get 从资源池获取一个资源
+// Get 从资源池获取一个资源，不返回T，是为了方便Put
 func (p *CommPool[T]) Get() (*resInfo[T], error) {
 	//如果存在空闲资源，直接返回
 	if !p.idle.IsEmpty() {
