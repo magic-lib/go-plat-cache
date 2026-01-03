@@ -9,6 +9,13 @@ type PoolManager[T any] struct {
 	pools cmap.ConcurrentMap[string, *CommPool[T]]
 }
 
+// NewPoolManager 创建一个资源池管理器
+func NewPoolManager[T any]() *PoolManager[T] {
+	return &PoolManager[T]{
+		pools: cmap.New[*CommPool[T]](),
+	}
+}
+
 func (gpm *PoolManager[T]) SetPool(namespace, name string, pool *CommPool[T]) {
 	if pool == nil {
 		return
