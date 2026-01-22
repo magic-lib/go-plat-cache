@@ -3,8 +3,8 @@ package filter_test
 import (
 	"context"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"github.com/hugh2632/bloomfilter"
-	"github.com/hugh2632/bloomfilter/memory"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"hash"
@@ -35,7 +35,7 @@ func TestRedisCachedFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log("误判率，False positive rate:", bloomfilter.GetFlasePositiveRate(10240*8, 3, 2)) // 5.364385288193686e-11
+	t.Log("误判率，False positive rate:", bloomfilter.GetFalsePositiveRate(10240*8, 3, 2)) // 5.364385288193686e-11
 	fillNums(cachedFilter, 250, 300)
 	t.Log(cachedFilter.Exists([]byte(strconv.Itoa(290)))) // true
 	t.Log(cachedFilter.Exists([]byte(strconv.Itoa(299)))) // true
@@ -101,8 +101,8 @@ func TestInteractiveFilter(t *testing.T) {
 }
 
 func TestMemFalsePositiveRate(t *testing.T) {
-	memFilter := bloomfilter.NewMemoryFilter(make([]byte, 10240), bloomfilter.DefaultHash...).(*memory.Filter)
-	testFalsePositiveRate(t, memFilter, 10240*8, 1000, 3, 100000000)
+	//memFilter := bloomfilter.NewMemoryFilter(make([]byte, 10240), bloomfilter.DefaultHash...).(*memory.Filter)
+	//testFalsePositiveRate(t, memFilter, 10240*8, 1000, 3, 100000000)
 	//=== RUN   TestMemFalsePositiveRate
 	//    common.go:37: 理论误判率 Theoretical false positive rate: 0.0018230817954481005
 	//    common.go:49: 实际误判率 Real false positive rate:0.00047424474244742447

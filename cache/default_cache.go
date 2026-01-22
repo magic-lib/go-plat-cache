@@ -20,7 +20,7 @@ var (
 )
 
 // New 新建
-func New[T any](ns string, con ...CommCache[string]) *defaultCache[T] {
+func New[T any](ns string, con ...CommCache[string]) CommCache[T] {
 	com := new(defaultCache[T])
 	com.ns = ns
 	if len(con) > 0 {

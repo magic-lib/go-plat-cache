@@ -56,4 +56,5 @@ var (
 	_ CommCache[any] = (*memLruCache[any])(nil)
 	_ CommCache[any] = (*diskCache[any])(nil)
 	_ CommCache[any] = (*mySQLCache[any])(nil)
+	_ CommCache[any] = (*JetCache[any])(nil)
 )
