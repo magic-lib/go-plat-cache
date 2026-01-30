@@ -58,7 +58,7 @@ func TestBatchExec(t *testing.T) {
 }
 
 func TestNewDiskCache(t *testing.T) {
-	client := cache.NewDiskCache("/Users/tianlin0/Downloads/cache/cache-data", 5*time.Minute)
+	client := cache.NewDiskCache[string]("/Users/tianlin0/Downloads/cache/cache-data", 5*time.Minute)
 
 	_, _ = client.Set(nil, "aaa", "bbb", 5*time.Second)
 	_, _ = client.Set(nil, "ccc", "bbb", 5*time.Second)
@@ -66,5 +66,16 @@ func TestNewDiskCache(t *testing.T) {
 	time.Sleep(6 * time.Second)
 
 	//_, _ = client.Del(nil, "aaa")
+
+}
+
+func TestNewFilterCache(t *testing.T) {
+	aa := cache.NewCuckooFilter(1000)
+	aa.Set(nil, "aaa", true, 5*time.Second)
+
+	mm, _ := aa.Get(nil, "aaa")
+	nn, _ := aa.Get(nil, "bbb")
+
+	fmt.Println(mm, nn)
 
 }
