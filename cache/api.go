@@ -14,6 +14,13 @@ type CommCache[V any] interface {
 	Del(ctx context.Context, key string) (bool, error)
 }
 
+type CommLocker interface {
+	TryLock(ctx context.Context, key string, ttl time.Duration) (lockId string, err error)
+	Renew(ctx context.Context, key string, lockId string, ttl time.Duration) (ok bool, err error)
+	UnLock(ctx context.Context, key string, lockId string) (ok bool, err error)
+	Lock(ctx context.Context, key string, ttl time.Duration) (lockId string, err error)
+}
+
 // GetNsKey 获取namespace下的key，规范化
 func getNsKey(ns string, key string) string {
 	if ns != "" {
