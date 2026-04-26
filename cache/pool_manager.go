@@ -36,3 +36,12 @@ func (gpm *PoolManager[T]) GetPool(namespace, name string) *CommPool[T] {
 	}
 	return nil
 }
+
+// GetAllPools 获取所有连接池
+func (gpm *PoolManager[T]) GetAllPools() []*CommPool[T] {
+	pools := make([]*CommPool[T], 0)
+	gpm.pools.IterCb(func(key string, pool *CommPool[T]) {
+		pools = append(pools, pool)
+	})
+	return pools
+}

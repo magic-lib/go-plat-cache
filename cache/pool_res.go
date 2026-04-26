@@ -12,8 +12,10 @@ import (
 	"time"
 )
 
-const defaultMaxSize = 10
-const defaultMaxUsage = 1 * time.Minute
+const (
+	defaultMaxSize  = 10
+	defaultMaxUsage = 5 * time.Minute
+)
 
 type Resource[T any] interface {
 	Get() T
@@ -79,6 +81,12 @@ func NewResPool[T any](connPool *ResPoolConfig[T]) *CommPool[T] {
 	if pool.New == nil {
 		panic("new function is required")
 	}
+
+	// 如果没有设置CloseFunc，可能会导致资源泄漏
+	if pool.CloseFunc == nil {
+		panic("Warning: CloseFunc is not set, resources may leak. It's recommended to provide a CloseFunc to properly release resources.")
+	}
+
 	pool.idle = cmap.New[Resource[T]]()
 	pool.used = cmap.New[Resource[T]]()
 	pool.once = cmap.New[*resInfo[T]]()
@@ -316,6 +324,24 @@ func (p *CommPool[T]) closeList(nowClose bool, list ...Resource[T]) error {
 				}
 				p.delayClose.Set(item.Id(), item)
 			}
+		} else {
+			// 即使没有设置CloseFunc，也需要立即清理资源引用
+			// 对于实现了io.Closer接口的类型，尝试调用Close方法
+			if nowClose {
+				if closer, ok := interface{}(item.Get()).(interface{ Close() error }); ok {
+					err := closer.Close()
+					if err != nil {
+						fmt.Printf("warning: auto-close resource failed: %v\n", err)
+						retErr = err
+					}
+				}
+			}
+
+			// 从所有列表中移除资源引用，让GC可以回收
+			p.idle.Remove(item.Id())
+			p.used.Remove(item.Id())
+			p.once.Remove(item.Id())
+			p.delayClose.Remove(item.Id())
 		}
 	})
 	if retErr != nil {

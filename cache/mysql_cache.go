@@ -18,7 +18,6 @@ import (
 var (
 	onlyOneCleanMap            = cmap.New[sync.Once]()
 	dontAutoCleanNamespaceList = cmap.New[[]string]()
-	allMysqlConnMap            = cmap.New[*sql.DB]() //全部保存所有数据库连接，避免重复创建，造成连接数过多
 )
 
 type MySQLCacheConfig struct {
@@ -48,44 +47,21 @@ type mySQLCache[V any] struct {
 func NewMySQLCache[V any](cfg *MySQLCacheConfig) (CommCache[V], error) {
 	if cfg.SqlDB == nil {
 		if cfg.DSN != "" {
-			sqlDB, ok := allMysqlConnMap.Get(cfg.DSN)
-			if ok && sqlDB != nil {
-				//已存在
-			} else {
-				var err error
-				sqlDB, err = sql.Open("mysql", cfg.DSN)
-				if err != nil {
-					return nil, fmt.Errorf("初始化数据库连接失败: %v", err)
-				}
-
-				// 配置连接池参数
-				if cfg.MaxOpenConns > 0 {
-					sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
-				} else {
-					sqlDB.SetMaxOpenConns(20) // 默认最大连接数
-				}
-
-				if cfg.MaxIdleConns > 0 {
-					sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
-				} else {
-					sqlDB.SetMaxIdleConns(10) // 默认空闲连接数
-				}
-
-				if cfg.ConnMaxLifetime > 0 {
-					sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-				} else {
-					sqlDB.SetConnMaxLifetime(time.Hour) // 默认连接最大生命周期1小时
-				}
-
-				if cfg.ConnMaxIdleTime > 0 {
-					sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
-				} else {
-					sqlDB.SetConnMaxIdleTime(10 * time.Minute) // 默认连接最大空闲时间10分钟
-				}
-
-				allMysqlConnMap.Set(cfg.DSN, sqlDB)
+			mysqlPool, err := CreateMySqlPool(&MySqlPoolConfig{
+				DSN:             cfg.DSN,
+				MaxOpenConns:    cfg.MaxOpenConns,
+				MaxIdleConns:    cfg.MaxIdleConns,
+				ConnMaxLifetime: cfg.ConnMaxLifetime,
+				ConnMaxIdleTime: cfg.ConnMaxIdleTime,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("初始化数据库连接池失败: %v", err)
 			}
-			cfg.SqlDB = sqlDB
+			mysqlRes, err := mysqlPool.Get()
+			if err != nil {
+				return nil, fmt.Errorf("获取数据库连接失败: %v", err)
+			}
+			cfg.SqlDB = mysqlRes.Get()
 		}
 	}
 
