@@ -21,7 +21,7 @@ var (
 )
 
 type MySQLCacheConfig struct {
-	DSN            string
+	DSN            string `json:"dsn"`
 	SqlDB          *sql.DB
 	TableName      string `json:"table_name"`
 	Namespace      string `json:"namespace"`
