@@ -70,7 +70,7 @@ func NewJetCache[V any](jConfig *JetCacheConfig) *JetCache[V] {
 
 // Get 从缓存中取得一个值
 func (co *JetCache[V]) Get(ctx context.Context, key string) (v V, err error) {
-	newV := conv.Pointer(v)
+	newV := conv.Pointer[V](v)
 	err = co.JetCacheGo.Get(ctx, key, newV)
 	if err != nil {
 		return v, err

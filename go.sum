@@ -218,10 +218,10 @@ github.com/lithammer/shortuuid/v3 v3.0.7 h1:trX0KTHy4Pbwo/6ia8fscyHoGA+mf1jWbPJV
 github.com/lithammer/shortuuid/v3 v3.0.7/go.mod h1:vMk8ke37EmiewwolSO1NLW8vP4ZaKlRuDIi8tWWmAts=
 github.com/lqiz/expr v1.1.4 h1:RqWXmm6e3KCptmTI4DIi8diy1wrJtSa5NKXBt3wnRhk=
 github.com/lqiz/expr v1.1.4/go.mod h1:K4gPC7oPAwRL1ijO1AfWRMNgibjxYJ7Qqod6svgAeVU=
-github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260310082347-edba5f046593 h1:3AjRm1UfOiPFLsUSEckqYfiN3A1caBdfgx1UDV/+XdY=
-github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260310082347-edba5f046593/go.mod h1:99xYCrpFPXG3hTrM52grTgMMx09zihbcOzeL1jcRrC0=
-github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260526095811-25f5b79be819 h1:SyhUIaZC/FJJzYj9eRqmM2wvk4XSuJnjJhfWy4awgaU=
-github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260526095811-25f5b79be819/go.mod h1:1b0Lv5r5ijaeLGC0V77kL21RzhheNUg2zmeq3QyW+6A=
+github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260615165422-366e87aa8511 h1:0ux8OoM+cxtRDeBquQHVg+hcf9LYRXnVkEmNtxM50RQ=
+github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260615165422-366e87aa8511/go.mod h1:rDQN10xGrkxfYEqsNYmhzY3GbGQHmqvgi5JFvHMEVyc=
+github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260701175001-bf9a68658e93 h1:RUtSWhu7jvyCLoXTAv4vRBM0fQ/CLeXU2x9RALqvDVY=
+github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260701175001-bf9a68658e93/go.mod h1:1b0Lv5r5ijaeLGC0V77kL21RzhheNUg2zmeq3QyW+6A=
 github.com/marspere/goencrypt v1.0.7 h1:Rlvsc9b7Yeaeda+gsGeCjREVZ/KL7szelRq4+haK5mw=
 github.com/marspere/goencrypt v1.0.7/go.mod h1:S5g6Wsd5jcOO01sp9QxNMYCldx9kecoDkK7BWaHA0vo=
 github.com/mattn/go-colorable v0.1.14 h1:9A9LHSqF/7dyVVX6g0U9cwm9pG3kP9gSzcuIPHPsaIE=
@@ -396,8 +396,8 @@ go.opentelemetry.io/otel/metric v0.20.0/go.mod h1:598I5tYlH1vzBjn+BTuhzTCSb/9deb
 go.opentelemetry.io/otel/metric v1.41.0 h1:rFnDcs4gRzBcsO9tS8LCpgR0dxg4aaxWlJxCno7JlTQ=
 go.opentelemetry.io/otel/metric v1.41.0/go.mod h1:xPvCwd9pU0VN8tPZYzDZV/BMj9CM9vs00GuBjeKhJps=
 go.opentelemetry.io/otel/oteltest v0.20.0/go.mod h1:L7bgKf9ZB7qCwT9Up7i9/pn0PWIa9FqQ2IQ8LoxiGnw=
-go.opentelemetry.io/otel/sdk v1.39.0 h1:nMLYcjVsvdui1B/4FRkwjzoRVsMK8uL/cj0OyhKzt18=
-go.opentelemetry.io/otel/sdk v1.39.0/go.mod h1:vDojkC4/jsTJsE+kh+LXYQlbL8CgrEcwmt1ENZszdJE=
+go.opentelemetry.io/otel/sdk v1.41.0 h1:YPIEXKmiAwkGl3Gu1huk1aYWwtpRLeskpV+wPisxBp8=
+go.opentelemetry.io/otel/sdk v1.41.0/go.mod h1:ahFdU0G5y8IxglBf0QBJXgSe7agzjE4GiTJ6HT9ud90=
 go.opentelemetry.io/otel/trace v0.20.0/go.mod h1:6GjCW8zgDjwGHGa6GkyeB8+/5vjT16gUEi0Nf1iBdgw=
 go.opentelemetry.io/otel/trace v1.41.0 h1:Vbk2co6bhj8L59ZJ6/xFTskY+tGAbOnCtQGVVa9TIN0=
 go.opentelemetry.io/otel/trace v1.41.0/go.mod h1:U1NU4ULCoxeDKc09yCWdWe+3QoyweJcISEVa1RBzOis=
