@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hugh2632/bloomfilter v0.0.0-20220107050508-533b6738df0f
 	github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260615165422-366e87aa8511
-	github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260701175001-bf9a68658e93
+	github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260703140137-adad6c692993
 	github.com/mgtv-tech/jetcache-go v1.2.6
 	github.com/orcaman/concurrent-map v1.0.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1

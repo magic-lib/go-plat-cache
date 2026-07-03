@@ -78,7 +78,8 @@ func NewMySQLCache[V any](cfg *MySQLCacheConfig) (CommCache[V], error) {
 			expire_time DATETIME DEFAULT NULL,
 			create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			PRIMARY KEY (namespace,cache_key) USING BTREE
+			PRIMARY KEY (namespace,cache_key) USING BTREE,
+			KEY idx_key (cache_key) USING BTREE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 	`, cfg.TableName)
 
