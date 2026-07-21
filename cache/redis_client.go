@@ -6,6 +6,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/magic-lib/go-plat-startupcfg/startupcfg"
 	"github.com/magic-lib/go-plat-utils/logs"
+	"log"
 	"time"
 )
 
@@ -23,7 +24,10 @@ type redisClient struct {
 
 // NewRedisClient 新建redis连接
 func NewRedisClient(redisCfg *startupcfg.RedisConfig) *redisClient {
-	return &redisClient{redisCfg: redisCfg}
+	return &redisClient{
+		redisCfg: redisCfg,
+		cli:      nil,
+	}
 }
 
 // SetMaxTimeout xxx
@@ -72,6 +76,10 @@ func (r *redisClient) Get(ctx context.Context, key string) (string, error) {
 	var rep string
 	rep, err = c.Get(ctx, key).Result()
 	if err != nil {
+		//key查不到，为空即可，不要报错
+		if err == redis.Nil {
+			log.Println("[redis-client] error: result not found")
+		}
 		return "", err
 	}
 	return rep, nil
@@ -140,6 +148,9 @@ func (r *redisClient) HGet(ctx context.Context, key, field string) (string, erro
 
 	retStr, err := c.HGet(ctx, key, field).Result()
 	if err != nil {
+		if err == redis.Nil {
+			log.Println("[redis-client] error: result not found")
+		}
 		return "", err
 	}
 	return retStr, nil
@@ -208,6 +219,7 @@ func (r *redisClient) getOneRedis() (*redis.Client, error) {
 		if defaultRedisCfg == nil {
 			SetDefaultRedisConfig(r.redisCfg)
 		}
+		//r.cli = rc.cli
 		return rc.cli, nil
 	}
 
