@@ -7,10 +7,11 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
+	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hugh2632/bloomfilter v0.0.0-20220107050508-533b6738df0f
-	github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260615165422-366e87aa8511
-	github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260703140137-adad6c692993
+	github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260714152739-0741167afbbc
+	github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260724050736-d68f8af8c4b2
 	github.com/mgtv-tech/jetcache-go v1.2.6
 	github.com/orcaman/concurrent-map v1.0.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
@@ -21,6 +22,7 @@ require (
 	github.com/samber/lo v1.52.0
 	github.com/seiflotfy/cuckoofilter v0.0.0-20240715131351-a2f2c23f1771
 	github.com/timandy/routine v1.1.5
+	go.etcd.io/bbolt v1.4.0
 	golang.org/x/sync v0.19.0
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.31.1
@@ -67,7 +69,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hbollon/go-edlib v1.7.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/iancoleman/orderedmap v0.3.0 // indirect
