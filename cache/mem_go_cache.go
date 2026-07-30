@@ -21,7 +21,7 @@ func NewMemGoCache[V any](defaultExpiration, cleanupInterval time.Duration) Comm
 }
 
 // Get 从缓存中取得一个值
-func (co *memGoCache[V]) Get(ctx context.Context, key string) (v V, err error) {
+func (co *memGoCache[V]) Get(_ context.Context, key string) (v V, err error) {
 	ret, ok := co.mCache.Get(key)
 	if ok {
 		if retVal, ok := ret.(V); ok {

@@ -79,3 +79,22 @@ func TestNewFilterCache(t *testing.T) {
 	fmt.Println(mm, nn)
 
 }
+func TestNewBBoltCache(t *testing.T) {
+	mm, err := cache.NewBBoltCache[string](&cache.BBoltCacheConfig{
+		DbPath:          "/Users/tianlin0/Downloads/bb.db",
+		TableNameList:   []string{},
+		Namespace:       "default",
+		RefreshDuration: 5 * time.Second,
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	ctx := context.Background()
+	_, _ = mm.Set(ctx, "aaa", "bbb", 5*time.Second)
+
+	mmmmm, _ := mm.Get(ctx, "aaa")
+
+	fmt.Println(mmmmm)
+
+}
