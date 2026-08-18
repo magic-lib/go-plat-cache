@@ -10,8 +10,8 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hugh2632/bloomfilter v0.0.0-20220107050508-533b6738df0f
-	github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260714152739-0741167afbbc
-	github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260724050736-d68f8af8c4b2
+	github.com/magic-lib/go-plat-startupcfg v1.20260210.2-0.20260818104539-4975fbfc160c
+	github.com/magic-lib/go-plat-utils v1.20260210.2-0.20260818103136-e724e747dd96
 	github.com/mgtv-tech/jetcache-go v1.2.6
 	github.com/orcaman/concurrent-map v1.0.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
