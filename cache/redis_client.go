@@ -2,11 +2,11 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/magic-lib/go-plat-startupcfg/startupcfg"
 	"github.com/magic-lib/go-plat-utils/logs"
-	"log"
 	"time"
 )
 
@@ -77,8 +77,8 @@ func (r *redisClient) Get(ctx context.Context, key string) (string, error) {
 	rep, err = c.Get(ctx, key).Result()
 	if err != nil {
 		//key查不到，为空即可，不要报错
-		if err == redis.Nil {
-			log.Println("[redis-client] error: result not found")
+		if errors.Is(err, redis.Nil) {
+			return "", nil
 		}
 		return "", err
 	}
@@ -148,8 +148,8 @@ func (r *redisClient) HGet(ctx context.Context, key, field string) (string, erro
 
 	retStr, err := c.HGet(ctx, key, field).Result()
 	if err != nil {
-		if err == redis.Nil {
-			log.Println("[redis-client] error: result not found")
+		if errors.Is(err, redis.Nil) {
+			return "", nil
 		}
 		return "", err
 	}
