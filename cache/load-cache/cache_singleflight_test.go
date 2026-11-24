@@ -282,3 +282,114 @@ func waitFor(t *testing.T, cond func() bool) {
 	}
 	t.Fatal("condition not met before timeout")
 }
+
+// 计数的快速加载函数，用来统计 load 被执行的次数
+func countingLoader(count *int32) func(ctx context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
+		atomic.AddInt32(count, 1)
+		return "new", nil
+	}
+}
+
+// 未设置刷新间隔：fn 很快时，前后相继的命中请求每次都会触发一次刷新
+func TestSingleFlightNoIntervalRefreshEveryHit(t *testing.T) {
+	c := newMapCache[string]()
+	_, _ = c.Set(context.Background(), "k", "old", time.Minute)
+	sf := NewSingleFlight(WithCache[string](c, time.Minute))
+	var count int32
+	for i := 0; i < 5; i++ {
+		_, _ = sf.Do(context.Background(), "k", countingLoader(&count))
+		waitFor(t, func() bool { return atomic.LoadInt32(&count) == int32(i+1) })
+	}
+}
+
+// 设置刷新间隔：间隔内多次命中只刷新一次，超过间隔后再刷新一次
+func TestSingleFlightRefreshInterval(t *testing.T) {
+	c := newMapCache[string]()
+	_, _ = c.Set(context.Background(), "k", "old", time.Minute)
+	sf := NewSingleFlight(WithCache[string](c, time.Minute), WithRefreshInterval[string](200*time.Millisecond))
+	var count int32
+	for i := 0; i < 20; i++ {
+		_, _ = sf.Do(context.Background(), "k", countingLoader(&count))
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := atomic.LoadInt32(&count); got != 1 {
+		t.Fatalf("refresh executed %d times within interval, want 1", got)
+	}
+
+	time.Sleep(250 * time.Millisecond)
+	_, _ = sf.Do(context.Background(), "k", countingLoader(&count))
+	waitFor(t, func() bool { return atomic.LoadInt32(&count) == 2 })
+}
+
+// 间隔到期时大量并发命中，也只会触发一次刷新
+func TestSingleFlightRefreshIntervalConcurrent(t *testing.T) {
+	c := newMapCache[string]()
+	_, _ = c.Set(context.Background(), "k", "old", time.Minute)
+	sf := NewSingleFlight(WithCache[string](c, time.Minute), WithRefreshInterval[string](time.Minute))
+	var count int32
+	for round := 0; round < 3; round++ { // 多轮并发：第一轮触发一次，之后都在间隔内
+		runConcurrent(50, func() (string, error) {
+			return sf.Do(context.Background(), "k", countingLoader(&count))
+		})
+	}
+	time.Sleep(50 * time.Millisecond)
+	if got := atomic.LoadInt32(&count); got != 1 {
+		t.Fatalf("refresh executed %d times, want 1", got)
+	}
+}
+
+// 未命中时同步加载也算一次刷新，紧接着的命中不会再刷新
+func TestSingleFlightRefreshIntervalAfterMiss(t *testing.T) {
+	c := newMapCache[string]()
+	sf := NewSingleFlight(WithCache[string](c, time.Minute), WithRefreshInterval[string](time.Minute))
+	var count int32
+	for i := 0; i < 10; i++ {
+		val, err := sf.Do(context.Background(), "k", countingLoader(&count))
+		if err != nil || val != "new" {
+			t.Fatalf("got %v %v", val, err)
+		}
+	}
+	time.Sleep(50 * time.Millisecond)
+	if got := atomic.LoadInt32(&count); got != 1 {
+		t.Fatalf("fn executed %d times, want 1", got)
+	}
+}
+
+// Forget 会清掉刷新间隔，下一次命中立即刷新
+func TestSingleFlightForgetResetsInterval(t *testing.T) {
+	c := newMapCache[string]()
+	_, _ = c.Set(context.Background(), "k", "old", time.Minute)
+	sf := NewSingleFlight(WithCache[string](c, time.Minute), WithRefreshInterval[string](time.Minute))
+	var count int32
+	_, _ = sf.Do(context.Background(), "k", countingLoader(&count))
+	waitFor(t, func() bool { return atomic.LoadInt32(&count) == 1 })
+	sf.Forget("k")
+	_, _ = sf.Do(context.Background(), "k", countingLoader(&count))
+	waitFor(t, func() bool { return atomic.LoadInt32(&count) == 2 })
+}
+
+// 刷新间隔不小于缓存时间时，调整为缓存时间的一半
+func TestSingleFlightRefreshIntervalAdjust(t *testing.T) {
+	c := newMapCache[string]()
+	cases := []struct {
+		ttl, interval, want time.Duration
+	}{
+		{time.Minute, 10 * time.Minute, 30 * time.Second}, // 大于 ttl：调整为一半
+		{time.Minute, time.Minute, 30 * time.Second},      // 等于 ttl：调整为一半
+		{time.Minute, 20 * time.Second, 20 * time.Second}, // 小于 ttl：保持不变
+		{0, 10 * time.Minute, 10 * time.Minute},           // ttl 为 0 表示不过期：不限制
+		{time.Minute, 0, 0},                               // 刷新间隔为 0：不校验，保持每次命中都可刷新
+		{0, 0, 0},                                         // 两者都为 0：不校验
+	}
+	for _, tc := range cases {
+		sf := NewSingleFlight(WithCache[string](c, tc.ttl), WithRefreshInterval[string](tc.interval))
+		if sf.refreshInterval != tc.want {
+			t.Errorf("ttl=%s interval=%s: got %s, want %s", tc.ttl, tc.interval, sf.refreshInterval, tc.want)
+		}
+	}
+	// 没有设置缓存时不调整
+	if sf := NewSingleFlight(WithRefreshInterval[string](time.Hour)); sf.refreshInterval != time.Hour {
+		t.Errorf("without cache: got %s, want 1h", sf.refreshInterval)
+	}
+}

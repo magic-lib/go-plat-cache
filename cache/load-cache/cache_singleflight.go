@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	platcache "github.com/magic-lib/go-plat-cache/cache"
@@ -19,11 +21,14 @@ import (
 //     2. 缓存未命中：同未设置缓存，一个请求执行 fn、其余等待共享结果，执行成功后写入缓存。
 //
 // 缓存的 Get 返回错误或零值都视为未命中。多个请求共享同一个结果，V 为指针、map、切片时调用方不要修改它。
+// 可用 WithRefreshInterval 限制缓存命中时的后台刷新频率。
 type SingleFlight[V any] struct {
-	group        singleflight.Group
-	cache        platcache.CommCache[V]
-	ttl          time.Duration
-	errorHandler func(key string, err error)
+	group           singleflight.Group
+	cache           platcache.CommCache[V]
+	ttl             time.Duration
+	refreshInterval time.Duration
+	lastRefresh     sync.Map // key -> *atomic.Int64，上一次加载的时间（UnixNano）
+	errorHandler    func(key string, err error)
 }
 
 // SingleFlightOption SingleFlight 的可选配置
@@ -34,6 +39,18 @@ func WithCache[V any](c platcache.CommCache[V], ttl time.Duration) SingleFlightO
 	return func(s *SingleFlight[V]) {
 		s.cache = c
 		s.ttl = ttl
+	}
+}
+
+// WithRefreshInterval 设置缓存命中时后台刷新的最小间隔：距离该 key 上一次加载不到 interval 时，
+// 只返回缓存值、不触发刷新，即 interval 内同一 key 最多刷新一次。
+// 不设置或设置为 <= 0 时，每次命中缓存都会尝试刷新（同一时刻仍只有一个在执行）。
+// 刷新失败后同样要等 interval 才会再次刷新。仅在设置了缓存时生效。
+// interval 必须小于缓存时间 ttl，否则缓存过期前不会触发刷新；不满足时 NewSingleFlight 会把它调整为 ttl 的一半，
+// interval 或 ttl 任一为 0 时不做校验。
+func WithRefreshInterval[V any](interval time.Duration) SingleFlightOption[V] {
+	return func(s *SingleFlight[V]) {
+		s.refreshInterval = interval
 	}
 }
 
@@ -52,6 +69,11 @@ func NewSingleFlight[V any](opts ...SingleFlightOption[V]) *SingleFlight[V] {
 			opt(s)
 		}
 	}
+	// 刷新间隔不小于缓存时间时，缓存过期前永远不会后台刷新，过期后请求只能同步等待加载，
+	// 这里调整为缓存时间的一半；两者任一为 0（缓存不过期 / 不限制刷新间隔）时不做校验
+	if s.cache != nil && s.ttl > 0 && s.refreshInterval > 0 && s.refreshInterval >= s.ttl {
+		s.refreshInterval = s.ttl / 2
+	}
 	return s
 }
 
@@ -66,9 +88,11 @@ func (s *SingleFlight[V]) Do(ctx context.Context, key string, fn func(ctx contex
 	if s.cache != nil {
 		if val, ok := s.getFromCache(ctx, key); ok {
 			// 命中：先返回旧值，后台只让一个请求去刷新；后台刷新不受当前请求 ctx 取消的影响
-			s.group.DoChan(key, func() (any, error) {
-				return s.load(context.WithoutCancel(ctx), key, fn, true)
-			})
+			if s.claimRefresh(key) {
+				s.group.DoChan(key, func() (any, error) {
+					return s.load(context.WithoutCancel(ctx), key, fn, true)
+				})
+			}
 			return val, nil
 		}
 	}
@@ -84,9 +108,41 @@ func (s *SingleFlight[V]) Do(ctx context.Context, key string, fn func(ctx contex
 	return val, nil
 }
 
-// Forget 让 key 的下一次请求重新执行，不再等待当前正在执行的那一次
+// Forget 让 key 的下一次请求重新执行，不再等待当前正在执行的那一次，也不受刷新间隔限制
 func (s *SingleFlight[V]) Forget(key string) {
 	s.group.Forget(key)
+	s.lastRefresh.Delete(key)
+}
+
+// claimRefresh 判断缓存命中时是否需要后台刷新：距离上一次加载已超过刷新间隔，
+// 并用 CAS 抢占本次刷新，保证并发请求在一个间隔内只有一个能触发刷新
+func (s *SingleFlight[V]) claimRefresh(key string) bool {
+	if s.refreshInterval <= 0 {
+		return true
+	}
+	now := time.Now().UnixNano()
+	last := s.refreshTime(key)
+	prev := last.Load()
+	if prev != 0 && now-prev < int64(s.refreshInterval) {
+		return false
+	}
+	return last.CompareAndSwap(prev, now)
+}
+
+// markLoaded 记录 key 的加载时间，未命中时同步加载的结果也算一次刷新
+func (s *SingleFlight[V]) markLoaded(key string) {
+	if s.refreshInterval <= 0 {
+		return
+	}
+	s.refreshTime(key).Store(time.Now().UnixNano())
+}
+
+func (s *SingleFlight[V]) refreshTime(key string) *atomic.Int64 {
+	if v, ok := s.lastRefresh.Load(key); ok {
+		return v.(*atomic.Int64)
+	}
+	v, _ := s.lastRefresh.LoadOrStore(key, new(atomic.Int64))
+	return v.(*atomic.Int64)
 }
 
 // load 真正执行 fn，成功后写入缓存。
@@ -111,6 +167,9 @@ func (s *SingleFlight[V]) load(ctx context.Context, key string, fn func(ctx cont
 		if _, setErr := s.cache.Set(ctx, key, val, s.ttl); setErr != nil {
 			// 写缓存失败不影响本次结果，只上报
 			s.handleError(key, fmt.Errorf("singleflight set cache error, key: %s: %w", key, setErr))
+		} else if !background {
+			// 同步加载刚写入的新值，刷新间隔内命中不必再刷新；后台刷新的时间已在 claimRefresh 中记录
+			s.markLoaded(key)
 		}
 	}
 	return val, nil
