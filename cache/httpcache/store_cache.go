@@ -50,8 +50,8 @@ func multiGetData[V any](ctx context.Context, storeList []cache.CommCache[*cache
 	}
 	storeKey := getStoreCacheKey(namespace, cacheKey)
 	if timeout > 0 {
-		value, err = goroutines.RunWithTimeout[*cacheData[V]](timeout, func() (*cacheData[V], error) {
-			return getDataFromCache[V](ctx, storeList, storeKey)
+		value, err = goroutines.GoAsyncTimeout[*cacheData[V]](ctx, timeout, func(oneCtx context.Context, paramsIn ...any) (*cacheData[V], error) {
+			return getDataFromCache[V](oneCtx, storeList, storeKey)
 		})
 		return value, err
 	}
@@ -79,9 +79,7 @@ func multiSetData[V any](ctx context.Context, storeList []cache.CommCache[*cache
 		if err == nil {
 			return true, nil
 		}
-		if err != nil {
-			lastErr = err
-		}
+		lastErr = err
 	}
 	return false, lastErr
 }
@@ -99,9 +97,7 @@ func multiDelData[V any](ctx context.Context, storeList []cache.CommCache[*cache
 		if err == nil {
 			return true, nil
 		}
-		if err != nil {
-			lastErr = err
-		}
+		lastErr = err
 	}
 	return false, lastErr
 }
