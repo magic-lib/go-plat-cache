@@ -80,9 +80,12 @@ func NewSingleFlight[V any](opts ...SingleFlightOption[V]) *SingleFlight[V] {
 // Do 按 key 执行 fn，同一 key 的并发请求只执行一次，行为见 SingleFlight 的说明。
 // 未命中缓存时，fn 使用第一个进来的请求的 ctx 执行，该 ctx 被取消会影响所有等待它结果的请求。
 func (s *SingleFlight[V]) Do(ctx context.Context, key string, fn func(ctx context.Context) (V, error)) (V, error) {
-	if fn == nil {
+	if fn == nil || key == "" {
 		var zero V
 		return zero, fmt.Errorf("singleflight fn is nil, key: %s", key)
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	if s.cache != nil {
